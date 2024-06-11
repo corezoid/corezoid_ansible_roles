@@ -1,0 +1,5 @@
+---
+# defaults file for roles/api-multipart
+
+mult_prometheus_port: 9103
+mult_tmp_dir: "/ebsmnt_mult_download"

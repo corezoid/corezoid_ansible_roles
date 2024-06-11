@@ -1,0 +1,4 @@
+---
+# vars file for elasticsearch
+es_logs_port: 8100
+es_logs_cluster_name: "worker-logs"

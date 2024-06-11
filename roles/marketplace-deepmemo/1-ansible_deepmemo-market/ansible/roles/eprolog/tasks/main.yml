@@ -1,0 +1,94 @@
+---
+# tasks file for eprolog
+- name: Setup systemd unit for epmd
+  template:
+    src: epmd.service.j2
+    dest: /etc/systemd/system/epmd.service
+    owner: root
+    group: root
+    mode: 0644
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+- name: Setup systemd unit for eprolog
+  template:
+    src: eprolog.service.j2
+    dest: /etc/systemd/system/eprolog.service
+    owner: root
+    group: root
+    mode: 0644
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+- name: Setup service for eprolog
+  template:
+    src: eprolog.j2
+    dest: /etc/init.d/eprolog
+    owner: root
+    group: root
+    mode: 0755
+  when:
+    - aws_centos_distribution_major_version == "6"
+
+
+- name: Setup deepmemo packages
+  yum:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - eprolog
+
+- name: Change owner to app-user
+  file:
+    path: "{{ work_dir }}/erlang"
+    state: directory
+    owner: "{{ work_user }}"
+    recurse: yes
+
+- name: Create dir for eprolog service
+  file:
+    path: /etc/systemd/system/eprolog.service.d
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+    mode: 0755
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+- name: Copy limits for eprolog
+  copy:
+    src: limits.conf
+    dest: /etc/systemd/system/eprolog.service.d/limits.conf
+    owner: root
+    group: root
+    mode: 0644
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+
+- name: Copy start script for erlang
+  copy:
+    src: eprolog_3
+    dest: "{{ work_dir }}/erlang/eprolog/bin/eprolog_3"
+    owner: "{{ work_user }}"
+    mode: 0755
+
+- name: Copy config for eprolog
+  template:
+    src: eprolog.config.j2
+    dest: /ebsmnt/conf/eprolog.config
+    owner: "{{ work_user }}"
+    mode: 0644
+
+- name: epmd service enable
+  service:
+    name: epmd
+    enabled: yes
+
+- name: eprolog service start
+  service:
+    name: eprolog
+    state: started
+    enabled: yes
+    

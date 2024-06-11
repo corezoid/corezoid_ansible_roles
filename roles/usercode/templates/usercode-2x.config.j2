@@ -1,0 +1,222 @@
+[
+  {cce, [
+    {cce_id, <<"cce-{{ usercode.id | default(ansible_default_ipv4.address) }}">>},
+
+    {light_cnode_threads_count, {{ usercode.cce_cnode_threads_count | default(ansible_processor_vcpus) }}}, %% number of threads for light nodes
+    {heavy_cnode_threads_count, {{ usercode.cce_cnode_threads_count | default(ansible_processor_vcpus) }}}, %% number of threads for heavy nodes
+
+    {light_cnode_watchdog_wakeup,  {{ cce_light_cnode_watchdog_wakeup | default(1000) }}}, %% time when watchdog wakes up and kills "longlive" codes in light nodes
+    {heavy_cnode_watchdog_wakeup, {{ cce_heavy_cnode_watchdog_wakeup | default(800) }}}, %% time when watchdog wakes up and kills "longlive" codes in heavy nodes
+
+    {cnode_max_exec_code_time, {{ cce_cnode_max_exec_code_time | default(1000) }}}, %% max time for each execution of code, kill process after this time
+
+    {cnode_threshold_to_writing_log, {{ cce_cnode_threshold_to_writing_log | default(0.1) }}}, %% max threshold to write it to log
+    {max_exec_time_to_change_cnode_type, {{ cce_max_exec_time_to_change_cnode_type | default(0.1) }}}, %% max exec piece of codes to change them to heavy node
+
+    {show_err_resps, {{ cce_show_err_resps | default("false") }}},
+    {show_ok_resps, {{ cce_show_ok_resps | default("false") }}},
+
+    {cnode_min_av_ram_to_clean_isolates, {{ cce_cnode_min_av_ram_to_clean_isolates | default(2621440) }}}, %% // 25% from 10 Gb in Kb
+    {cnode_max_used_per_isolate, {{ cce_cnode_max_used_per_isolate | default(5) }}}, %% // in Mb
+
+    % postgresql settings
+    {pgsql, [
+        {host, "{{ db_main.host }}"},
+        {user, "{{ db_main.user }}"},
+        {dbname, "cce"},
+        {password, "{{ db_main.pass }}"},
+        {start_size, 1},
+        {min_size, 1},
+        {max_size, 5}
+    ]},
+
+    % postgresql statistics settings
+    {pgsql_statistics, [
+        {host, "{{ db_main.host }}"},
+        {user, "{{ db_main.user }}"},
+        {dbname, "conveyor"},
+        {password, "{{ db_main.pass }}"},
+        {start_size, 1},
+        {min_size, 1},
+        {max_size, 5}
+    ]},
+
+    %% dns cache. Support multiply dnses cache
+    %% name - unical name will be able to use in publish/consumer rabbitmq instead of server name
+    %% dns - DNS name
+    %% ns - NS name
+    %% ttl - auto reload info from DNS server (in seconds)
+    {dns_cache, [
+        [
+            {name, main},
+            {dns, "{{ rmq_host }}"},
+            {ttl, 60}
+        ],
+        [
+            {name, name2},
+            {dns, "..."},
+            {ttl, 60}
+        ],
+        [
+            {name, name3},
+            {dns, "..."},
+            {ttl, 60}
+        ],
+        [
+            {name, name4},
+            {dns, "..."},
+            {ttl, 60}
+        ]
+    ]},
+
+    %% консьюмер пакетов(компиляция кода, получение кода, удаление кода)
+    {consumer_ctrl, [
+        {servers, [
+{% for item in rmq_core %}
+            [
+                %%{dns_name, name{{ rmq_core.index(item) }}},
+                {host, "{{ item.host }}"},
+                {port, {{ item.port }}},
+                {username, <<"{{ item.user }}">>},
+                {password, <<"{{ item.pass }}">>},
+                {vhost, <<"{{ rmq_vhost }}">>}
+{% if rmq_core.index(item) == rmq_core|length - 1 %}
+            ]
+{% else %}
+            ],
+{% endif %}
+{% endfor %}
+        ]},
+        {queues_count, {{ cce_consumer_ctrl_queues_count | default(1) }}},
+        {connections_per_queue, 1},
+        {channels_per_connection, 2},
+        {messages_prefetch_size_per_channel, 10}
+    ]},
+
+    %% продюсер ответов cce
+    {publish_process_data, [
+        {servers, [
+{% for item in rmq_core %}
+            [
+                %%{dns_name, name{{ rmq_core.index(item) }}},
+                {host, "{{ item.host }}"},
+                {port, {{ item.port }}},
+                {username, <<"{{ item.user }}">>},
+                {password, <<"{{ item.pass }}">>},
+                {vhost, <<"{{ rmq_vhost }}">>}
+{% if rmq_core.index(item) == rmq_core|length - 1 %}
+            ]
+{% else %}
+            ],
+{% endif %}
+{% endfor %}
+        ]},
+        {min_size, 10},
+        {max_size, 10},
+        {start_size, 10}
+    ]},
+
+    %% консьюмер обработки кода
+    {consumer_process_data, [
+        {servers, [
+{% for item in rmq_core %}
+            [
+                %%{dns_name, name{{ rmq_core.index(item) }}},
+                {host, "{{ item.host }}"},
+                {port, {{ item.port }}},
+                {username, <<"{{ item.user }}">>},
+                {password, <<"{{ item.pass }}">>},
+                {vhost, <<"{{ rmq_vhost }}">>}
+{% if rmq_core.index(item) == rmq_core|length - 1 %}
+            ]
+{% else %}
+            ],
+{% endif %}
+{% endfor %}
+        ]},
+        {queues_count, {{ cce_consumer_process_data_queues_count | default(5) }}},
+        {connections_per_queue, 5},
+        {channels_per_connection, 2},
+        {messages_prefetch_size_per_channel, 50}
+    ]},
+
+    {zabbix, [
+        {server, "{{ zabbix_host }}"},
+        {src_host, "{{ ansible_hostname }}"},
+        {send_interval, 5},
+        {disabled, {{ zabbix_disabled }}}
+    ]}
+  ]},
+
+  {zabbix_sender, [
+      {zabbix_host, "{{ zabbix_host }}"},
+      {zabbix_port, 10051},
+      {nodename, "{{ ansible_hostname }}"},
+      {disabled, {{ zabbix_disabled }}}
+  ]},
+
+{% if hc_server_disabled == "false" %}
+  %% Client for server healthcheck
+  {hcheck_sender, [
+      {host, <<"{{ hc_server_host }}">>}, %% host of the remote healthcheck server
+      {port, {{ hc_server_port }}}, %% port of the remote healthcheck server
+      {node_name, <<"capi-{{ capi_id | default(ansible_default_ipv4.address) }}">> }, %% different for each node
+      {node_type, <<"capi">> }, %% capi | worker | multipart | http_worker | usercode | deepmemo ...
+      {disabled, {{ hc_server_disabled }}}, %% true by default
+      {send_interval_sec, {{ hc_server_send_interval_sec | default(30) }}}, %% by default 10 sec
+      {send_system_counters, true} %% memory processes etc, false by default
+  ]},
+{% else %}
+  {hcheck_sender, [
+      {disabled, {{ hc_server_disabled }}} %% true by default
+  ]},
+{% endif %}
+
+  {lager, [
+      %% What handlers to install with what arguments (wrapped by middleman)
+      {handlers, [
+            {lager_file_backend, [
+                {file, "log/error.log"}, {level, error}, {size, 734003200}, {date, "$D0"}, {count, 5}]},
+            {lager_file_backend, [
+                {file, "log/console.log"}, {level, info}, {size, 734003200}, {date, "$D0"}, {count, 5}]}
+        ]},
+        %% What colors to use with what log levels
+        {colored, true},
+        {colors, [
+          {debug,     "\e[0;38m" },
+          {info,      "\e[1;37m" },
+          {notice,    "\e[1;36m" },
+          {warning,   "\e[1;33m" },
+          {error,     "\e[1;31m" },
+          {critical,  "\e[1;35m" },
+          {alert,     "\e[1;44m" },
+          {emergency, "\e[1;41m" }
+        ]},
+
+        %% Whether to write a crash log, and where. Undefined means no crash logger.
+        {crash_log, "log/crash.log"},
+        %% Maximum size in bytes of events in the crash log - defaults to 65536
+        {crash_log_msg_size, 65536},
+        %% Maximum size of the crash log in bytes, before its rotated, set
+        %% to 0 to disable rotation - default is 0
+        {crash_log_size, 734003200},
+        %% What time to rotate the crash log - default is no time
+        %% rotation. See the README for a description of this format.
+        {crash_log_date, "$D0"},
+        %% Number of rotated crash logs to keep, 0 means keep only the
+        %% current one - default is 0
+        {crash_log_count, 5},
+        %% Whether to redirect error_logger messages into lager - defaults to true
+        {error_logger_redirect, true},
+        %% How many messages per second to allow from error_logger before we start dropping them
+        {error_logger_hwm, 100},
+        %% How big the gen_event mailbox can get before it is switched into sync mode
+        {async_threshold, 3200},
+        %% Switch back to async mode, when gen_event mailbox size decrease from `async_threshold'
+        %% to async_threshold - async_threshold_window
+        {async_threshold_window, 3010}
+    ]
+  },
+
+  {sasl, [{sasl_error_logger, false}]}
+].

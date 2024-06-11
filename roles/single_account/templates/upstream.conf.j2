@@ -1,0 +1,10 @@
+upstream sa-backend {
+{% if single_account_hosts[0].host == "" or single_account_hosts is not defined %}
+	server  127.0.0.1:{{ single_account_app_port }};
+{% else %}
+{% for item in single_account_hosts %}
+	server {{ item.host }}:{{ single_account_app_port }};
+{% endfor %}
+{% endif%}
+}
+

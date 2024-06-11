@@ -1,0 +1,28 @@
+[Unit]
+Description=Corezoid {{ item }} Application
+After=network.target
+
+[Service]
+Type=forking
+PermissionsStartOnly=true
+
+User=app-user
+Group=app-user
+
+ExecStartPre=/bin/mkdir -p /var/run/{{ item }}
+ExecStartPre=/bin/chown app-user:app-user /var/run/{{ item }}
+
+Environment=CONFIG_PATH=/ebsmnt/conf/{{ item }}.config
+Environment=HOME=/ebsmnt/erlang/{{ item }}
+
+ExecStart=/ebsmnt/erlang/{{ item }}/bin/{{ item }} start
+ExecStartPost=/bin/sh -c 'echo $MAINPID > /var/run/{{ item }}/{{ item }}.pid'
+
+ExecStop=/ebsmnt/erlang/{{ item }}/bin/{{ item }} stop
+
+ExecStopPost=/bin/sh -c 'rm -fr /var/run/{{ item }}/{{ item }}.pid'
+
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

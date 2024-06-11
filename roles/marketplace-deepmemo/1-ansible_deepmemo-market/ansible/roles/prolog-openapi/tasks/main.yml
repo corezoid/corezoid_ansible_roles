@@ -1,0 +1,92 @@
+---
+# tasks file for prolog-openapi
+- name: Setup systemd unit for epmd
+  template:
+    src: epmd.service.j2
+    dest: /etc/systemd/system/epmd.service
+    owner: root
+    group: root
+    mode: 0644
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+- name: Setup systemd unit for prlog-openapi
+  template:
+    src: prolog-openapi.service.j2
+    dest: /etc/systemd/system/prolog-openapi.service
+    owner: root
+    group: root
+    mode: 0644
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+- name: Setup service for prlog-openapi
+  template:
+    src: prolog-openapi.j2
+    dest: /etc/init.d/prolog-openapi
+    owner: root
+    group: root
+    mode: 0755
+  when:
+    - aws_centos_distribution_major_version == "6"
+
+- name: Setup deepmemo packages
+  yum:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - prolog-openapi
+
+- name: Copy start script for erlang
+  copy:
+    src: prolog_open_api_2
+    dest: "{{ work_dir }}/erlang/prolog-openapi/bin/prolog_open_api_2"
+    owner: "{{ work_user }}"
+    mode: 0755
+
+- name: Create dir for prolog-openapi service
+  file:
+    path: /etc/systemd/system/prolog-openapi.service.d
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+    mode: 0755
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+- name: Copy limits for prolog-openapi
+  copy:
+    src: limits.conf
+    dest: /etc/systemd/system/prolog-openapi.service.d/limits.conf
+    owner: root
+    group: root
+    mode: 0644
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+- name: Copy config for prolog-open-api
+  template:
+    src: prolog-openapi.config.j2
+    dest: /ebsmnt/conf/prolog-openapi.config
+    owner: "{{ work_user }}"
+    mode: 0644
+
+- name: Change owner to app-user
+  file:
+    path: "{{ work_dir}}/erlang"
+    state: directory
+    owner: "{{ work_user }}"
+    recurse: yes
+
+- name: epmd service enable
+  service:
+    name: epmd
+    enabled: yes
+
+
+- name: prolog-openapi service start
+  service:
+    name: prolog-openapi
+    state: started
+    enabled: yes

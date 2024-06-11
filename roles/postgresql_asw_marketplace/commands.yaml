@@ -1,0 +1,4 @@
+yum -y install yum-plugin-downloadonly https://download.postgresql.org/pub/repos/yum/reporpms/EL-6-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+
+yum install --downloadonly --downloaddir=/rpm postgresql96 postgresql96-server postgresql96-contrib postgresql96-test pg_repack96 python-psycopg2
+yum install --downloadonly --downloaddir=/rpm pgbouncer

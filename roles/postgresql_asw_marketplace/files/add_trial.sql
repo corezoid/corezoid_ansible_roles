@@ -1,0 +1,1 @@
+INSERT INTO payment_plans VALUES (1, 'trial', '1', 0, 15, 1000000, 'usd', 'interval');

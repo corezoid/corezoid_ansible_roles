@@ -1,0 +1,60 @@
+- name: Install Monit Packages
+  yum:
+    name: "{{ item }}"
+    update_cache: yes
+    state: present
+    # lock_timeout: 180
+  with_items:
+    - "monit"
+  tags:
+    - system-all
+    - system-monit
+    - system-monit-install
+
+- name: Create monit.conf file
+  template:
+    src: templates/monit.conf.j2
+    dest: /etc/monit.conf
+    owner: root
+    group: root
+    mode: 0600
+  tags:
+    - system-all
+    - system-monit
+    - system-monit-config
+
+- name: Create monit directory
+  file:
+    path: /var/monit
+    state: directory
+    mode: 0755
+    owner: root
+    group: root
+  tags:
+    - system-all
+    - system-monit
+    - system-monit-dirs
+
+- name: Create monit id file
+  file:
+    path: /var/monit/id
+    owner: root
+    group: root
+    mode: 0600
+    state: touch
+  tags:
+    - system-all
+    - system-monit
+    - system-monit-dirs
+
+- name: Start monit services
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  with_items:
+    - "monit"
+  tags:
+    - system-all
+    - system-monit
+    - system-monit-service

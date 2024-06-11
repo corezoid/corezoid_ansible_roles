@@ -1,0 +1,246 @@
+- name: Set EL version
+  set_fact:
+    el_version: 7
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "7"
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-install
+
+- name: Set EL version
+  set_fact:
+    el_version: 8
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "8"
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-install
+
+- name: Set EL version
+  set_fact:
+    el_version: 6
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "6"
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-install
+
+- name: Set EL version
+  set_fact:
+    el_version: 7
+  when:
+    - ansible_distribution == "Amazon"
+    - ansible_distribution_major_version == "2"
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-install
+
+- name: Add PostgreSQL Repo
+  include: add_repo.yml
+  tags:
+     - pgsql-all
+     - pgsql-pgbouncer
+     - pgsql-pgbouncer-install
+
+- name: Install PgBouncer packages
+  yum: name={{ item }} state=present update_cache=yes
+  with_items:
+    # - pgbouncer-{{ pgbouncer_version }}.rhel{{ el_version }}
+#    - pgbouncer-{{ pgbouncer_version }}
+    - pgbouncer
+  when: ansible_distribution != "Amazon"
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-install
+
+
+- name: Copying packages for further installation PgBouncer on AMI2
+  copy:
+    src: "files/ius-release-el7.rpm"
+    dest: "/tmp/"
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+
+
+- name: Install PgBouncer packages for AMI2
+  block:
+    - name: remove python37
+      shell: yum remove python3* -y
+    - name: python36 installation
+      shell: sudo yum install /tmp/ius-release-el7.rpm -y
+    - name:  python36 installation
+      shell: yum install python36 -y
+#    - name: enable python3
+#      shell: amazon-linux-extras install python3 -y
+    - name: install pgbouncer
+#      yum: name={{ item }} state=present update_cache=yes disablerepo="Middleware-system"
+      yum: name={{ item }} state=present update_cache=yes disablerepo="*" enablerepo="epel*"
+      with_items:
+        - pgbouncer
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-install
+
+- name: Install PgBouncer packages for AMI3
+  yum:
+    name: "pgbouncer"
+    state: present
+    update_cache: yes
+    enablerepo: "Middleware-system"
+    disablerepo: "*"
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-install
+
+- name: Enable pgbouncer to survive reboot
+  service: name={{ item }} enabled=yes
+  with_items:
+    - pgbouncer
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+
+- name: Pgbouncer configuration, get hash for user - {{ db_app_user }}
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} postgres -U postgres -Atc "select 'md5' || md5 ('{{ db_app_user_pass }}' || '{{ db_app_user }}')"
+  register: db_app_user_hash
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-userlist
+
+- name: Pgbouncer configuration, get hash for user - {{ db_fdw_user }}
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} postgres -U postgres -Atc "select 'md5' || md5 ('{{ db_fdw_user_pass }}' || '{{ db_fdw_user }}')"
+  register: db_fdw_user_hash
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-userlist
+
+- name: Pgbouncer configuration, get hash for user - {{ db_monitoring_user }}
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} postgres -U postgres -Atc "select 'md5' || md5 ('{{ db_monitoring_user_password }}' || '{{ db_monitoring_user }}')"
+  register: db_monitoring_user_hash
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-userlist
+
+- name: Add pgbouncer.ini
+  template:
+    src: templates/pgbouncer.ini.j2
+    dest: /etc/pgbouncer/pgbouncer.ini
+    mode: 0644
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+
+- name: Creates systems directory for PgBouncer
+  file:
+    path: "/etc/systemd/system/pgbouncer.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8"
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-systemd
+
+- name: Add systemd limits.conf for PgBouncer
+  template:
+    src: "templates/{{ item }}.j2"
+    dest: "/etc/systemd/system/pgbouncer.service.d/{{ item }}"
+    mode: 0755
+  with_items:
+    - "limits.conf"
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8"
+  register: pgbouncer_systemd_file
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-systemd
+
+- name: Reload systemd-daemon if pgbouncer_systemd_file changed
+  service:
+    # name: pgbouncer
+    # state: reloaded
+    daemon_reload: yes
+  when: pgbouncer_systemd_file.changed
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-systemd
+
+# - name: pgbouncer configuration, get hash for user - {{ db_app_user }}
+#   shell: psql -h {{ db_main_host }} -p {{ init_db_port }} -U {{ db_superuser_login }} postgres -Atc "select 'md5' || md5 ('{{ db_app_user_pass }}' || '{{ db_app_user }}')"
+#   register: db_app_user_hash
+#   tags:
+#     - pgsql-all
+#     - pgsql-pgbouncer
+#     - pgsql-pgbouncer-userlist
+
+# - name: pgbouncer configuration, get hash for user - {{ db_monitoring_user }}
+#   shell: psql -h {{ db_main_host }} -p {{ init_db_port }} -U {{ db_superuser_login }} postgres -Atc "select 'md5' || md5 ('{{ db_monitoring_user_password }}' || '{{ db_monitoring_user }}')"
+#   register: db_monitoring_user_hash
+#   tags:
+#     - pgsql-all
+#     - pgsql-pgbouncer
+#     - pgsql-pgbouncer-userlist
+
+- name: Add pgbouncer.ini
+  template:
+    src: templates/pgbouncer.ini.j2
+    dest: /etc/pgbouncer/pgbouncer.ini mode=0644
+
+- name: Add userlist.txt
+  template:
+    src: templates/userlist.txt.j2
+    dest: /etc/pgbouncer/userlist.txt
+    mode: 0600
+    owner: pgbouncer
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-userlist
+
+- name: Start pgbouncer service
+  service: name={{ item }} state=started
+  with_items:
+    - pgbouncer
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-start
+
+# - name: Restart pgbouncer service
+#   service:
+#     name: "{{ item }}"
+#     state: restarted
+#   with_items:
+#     - pgbouncer
+#   tags:
+#     - pgsql-all
+#     - pgsql-pgbouncer
+#     - pgsql-pgbouncer-restart
+

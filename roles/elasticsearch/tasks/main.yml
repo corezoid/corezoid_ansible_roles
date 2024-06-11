@@ -1,0 +1,233 @@
+---
+# curl -XGET 'http://localhost:9200/_cluster/health?pretty=true'
+
+- name: Remove old elasticsearch repo
+  file:
+    path: /etc/yum.repos.d/elasticsearch-2x.repo
+    state: absent
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+    - elasticsearch-repo-install
+
+- name: Add Elasticsearch repo
+  template:
+    src: templates/{{ elasticsearch.version }}-elasticsearch.repo.j2
+    dest: /etc/yum.repos.d/elasticsearch.repo
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+    - elasticsearch-repo-install
+
+- name: Yum clean all
+  command: yum clean all
+#  args:
+#    warn: false
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+
+- name: Install Java
+  shell: amazon-linux-extras install java-openjdk11 -y
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+
+- name: Install Java AMI3
+  shell: yum install java-11 -y
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+
+- name: Install Java
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  with_items:
+    - "java-11-openjdk"
+    - "java-11-openjdk-headless"
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "8"
+
+- name: update-crypto-policies elasticsearch Centos 9
+  shell: update-crypto-policies --set DEFAULT:SHA1
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "9"
+
+##https://repo.middleware.biz/system/el7/elasticsearch-6.7.2.rpm
+- name: Install elasticsearch packages
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+    disablerepo: "*"
+    enablerepo: "elasticsearch*"
+  with_items:
+    - "elasticsearch-{{ elasticsearch.version }}.*"
+  notify:
+    - restart elasticsearch
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+
+- name: Install nginx packages
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  with_items:
+    - "nginx"
+  notify:
+    - restart elasticsearch
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+
+
+- name: Creates main directory for Elasticsearch
+  file:
+    path: "{{ top_dir }}/{{ elasticsearch_logs.es_main_dir }}"
+    state: directory
+    owner: "{{ elasticsearch_logs.es_dir_owner }}"
+    group: "{{ elasticsearch_logs.es_dir_owner }}"
+    mode: 0775
+    recurse: yes
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+    - elasticsearch-install-main-dir
+
+- name: Create Elasticsearch Config
+  template:
+    src: "templates/{{ elasticsearch.version }}-{{ item }}.yml.j2"
+    dest: "/etc/{{ item }}/{{ item }}.yml"
+    owner: "{{ elasticsearch_logs.es_dir_owner }}"
+    group: "{{ elasticsearch_logs.es_dir_owner }}"
+    mode: 0750
+  with_items:
+    - elasticsearch
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+  register: elasticsearch_conf_changed
+
+- name: Creates directories for Elasticsearch
+  with_items:
+    - work
+    - data
+    - plugins
+  file:
+    path: "{{ top_dir }}/{{ elasticsearch_logs.es_main_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ elasticsearch_logs.es_dir_owner }}"
+    group: "{{ elasticsearch_logs.es_dir_owner }}"
+    mode: 0775
+    recurse: yes
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+
+- name: Nginx delete default configs
+  file:
+    path: "/etc/nginx/conf.d/{{ item }}"
+    state: absent
+  with_items:
+    - "default.conf"
+    - "virtual.conf"
+    - "ssl.conf"
+  tags:
+    - elasticsearch-all
+    - elasticsearch-nginx-setup
+
+- name: Create main nginx config file
+  template:
+    src: "templates/nginx.conf.j2"
+    dest: "/etc/nginx/nginx.conf"
+    owner: root
+    group: root
+    mode: 0600
+  tags:
+    - elasticsearch-all
+    - elasticsearch-nginx-setup
+  register: nginx_conf_changed
+
+- name: Create nginx configs for Elasticsearch
+  template:
+    src: "templates/{{ item }}.j2"
+    dest: "/etc/nginx/conf.d/{{ item }}"
+    owner: root
+    group: root
+    mode: 0600
+  with_items:
+    - "es.conf"
+  notify:
+    - Restart Nginx
+  tags:
+    - elasticsearch-all
+    - elasticsearch-nginx-setup
+  register: nginx_conf_changed
+
+- name: Force systemd to reread configs
+  systemd:
+    daemon_reload: yes
+  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "7"
+
+- name: Restart ElasticSearch
+  service:
+    name: "{{ item }}"
+    state: restarted
+    enabled: yes
+  when: elasticsearch_conf_changed.changed
+  with_items:
+    - elasticsearch
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+
+
+
+- name: Enable services to survive reboot
+  service:
+    name: "{{ item }}"
+    enabled: yes
+    state: started
+  with_items:
+    - elasticsearch
+    - nginx
+  notify:
+    - restart elasticsearch
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+
+- name: Create monit file
+  template:
+    src: "templates/{{ item }}.monit.j2"
+    dest: "/etc/monit.d/{{ item }}"
+    owner: root
+    group: root
+    mode: 0600
+  with_items:
+    - elasticsearch
+  register: monit_file
+  tags:
+    - elasticsearch-all
+    - elasticsearch-monit
+
+- name: Reload monit if config file changed
+  service:
+    name: monit
+    state: reloaded
+  when: monit_file.changed
+  tags:
+    - elasticsearch-all
+    - elasticsearch-monit
+

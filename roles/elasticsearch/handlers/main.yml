@@ -1,0 +1,24 @@
+---
+# handlers file for usercode
+- name: Restart Nginx
+  service:
+    name: "{{ item }}"
+    state: restarted
+    enabled: yes
+  with_items:
+    - nginx
+  when: nginx_conf_changed.changed
+  tags:
+    - elasticsearch-all
+    - elasticsearch-nginx-setup
+
+- name: restart elasticsearch
+  service:
+    name: "{{ item }}"
+    state: restarted
+    enabled: yes
+  with_items:
+    - elasticsearch
+  tags:
+    - elasticsearch-all
+    - elasticsearch-nginx-setup

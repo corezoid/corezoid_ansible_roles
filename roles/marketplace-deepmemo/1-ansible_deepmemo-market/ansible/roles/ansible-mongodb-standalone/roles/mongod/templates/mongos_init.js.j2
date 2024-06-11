@@ -1,0 +1,20 @@
+db.createUser({
+  user: 'admin',
+  pwd: '{{mongo_admin_pass}}',
+  roles : [
+    'userAdminAnyDatabase',
+    'clusterAdmin'
+  ]
+});
+
+db.auth('admin', '{{mongo_admin_pass}}');
+
+printjson(rs.status());
+
+db.createUser({
+  user: '{{mongo_sender_user}}',
+  pwd: '{{mongo_sender_pass}}',
+  roles : [ { role: 'readWrite', db: 'sender' },
+            { role: 'dbOwner', db: 'sender' }
+  ]
+});

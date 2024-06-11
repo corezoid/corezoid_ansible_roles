@@ -1,0 +1,4 @@
+---
+# handlers file for usercode
+- name: restart usercode
+  service: name=usercode state=restarted enabled=yes

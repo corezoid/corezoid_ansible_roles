@@ -1,0 +1,23 @@
+---
+# tasks file for mongo.config
+- name: install python module for mongodb
+  pip:
+    name: pymongo
+    state: present
+
+- name: Install deepmemo db
+  raw: mongo -u admin -p {{ mongodb_admin_password }} --authenticationDatabase admin --eval "db.movie.insert({'name':'tutorials point'})" {{ mongodb_deepmeo_db_name }}
+  tags:
+    - skip_ansible_lint
+
+
+- name: Setup deepmemo user
+  mongodb_user:
+    login_database: admin
+    login_user: admin
+    login_password: "{{ mongodb_admin_password }}"
+    name: "{{ mongodb_deepmemo_user }}"
+    password: "{{ mongodb_deepmemo_password }}"
+    roles: dbOwner
+    state: present
+    database: "{{ mongodb_deepmeo_db_name }}"

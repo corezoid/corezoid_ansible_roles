@@ -1,0 +1,17 @@
+---
+
+- name: redis, first run_once
+  import_tasks: install.yml
+  tags:
+    - redis-all
+
+# - name: redis firewall
+#   firewalld:
+#     source: "{{ subnet }}"
+#     port: "{{ redis_cache_port }}/tcp"
+#     permanent: yes
+#     zone: public
+#     state: enabled
+#   tags:
+#     - redis-all
+#     - redis-firewall

@@ -1,0 +1,147 @@
+---
+# defaults file for worker
+
+worker_max_task_size: 262144
+timer_auto_init: "true"
+
+pg_conn_pool_start: 2
+pg_conn_pool_min: 2
+pg_conn_pool_max: 1000
+
+# counters
+redis_conn_pool_start: 50
+redis_conn_pool_min: 50
+redis_conn_pool_max: 2000
+
+# api_sum
+redis_api_sum_pool_start: 50
+redis_api_sum_pool_min: 50
+redis_api_sum_pool_max: 200
+
+# cache
+redis2_conn_pool_start: 100
+redis2_conn_pool_min: 100
+redis2_conn_pool_max: 4000
+
+redis2_ttl: 43200
+dns_cache_ttl: 60
+
+# publish_unload_archive_task
+pub_arc_pool_start: 50
+pub_arc_pool_min: 50
+pub_arc_pool_max: 150
+
+# consumer_unload_archive_task
+cons_arc_conn_per_queue: 5
+cons_arc_channels_per_connection: 2
+cons_arc_msg_prefetch_size: 1000
+cons_arc_workers: 20
+
+# publish_copy_task_request
+pub_copy_task_queues_count: 1
+pub_copy_task_pool_min: 5
+pub_copy_task_pool_max: 5
+pub_copy_task_pool_start: 5
+
+# consumer_copy_task_response
+cons_copy_task_connections_per_queue: 1
+cons_copy_task_channels_per_connection: 1
+cons_copy_task_msg_prefetch_size: 50
+
+# publish_timer_request
+pub_timers_pool_min: 5
+pub_timers_pool_max: 5
+pub_timers_pool_start: 5
+
+# consumer_timer_response
+cons_timers_conn_per_queue: 1
+cons_timers_channels_per_connection: 1
+cons_timers_msg_prefetch_size: 50
+
+# publish_http_request
+pub_http_queues_count: 1
+pub_http_pool_min: 20
+pub_http_pool_max: 50
+pub_http_pool_start: 20
+
+# consumer_http_response
+cons_http_connections_per_queue: 10
+cons_http_channels_per_connection: 5
+cons_http_msg_prefetch_size: 50
+
+# publish_rpc_request
+pub_rpc_queues_count: 1
+pub_rpc_pool_min: 5
+pub_rpc_pool_max: 5
+pub_rpc_pool_start: 5
+
+# consumer_rpc_response
+cons_rpc_connections_per_queue: 5
+cons_rpc_channels_per_connection: 1
+cons_rpc_msg_prefetch_size: 50
+
+# publish_cce_request
+pub_cce_queues_count: 4
+pub_cce_pool_min: 30
+pub_cce_pool_max: 50
+pub_cce_pool_start: 30
+
+# consumer_cce_response
+cons_cce_connections_per_queue: 5
+cons_cce_channels_per_connection: 2
+cons_cce_msg_prefetch_size: 50
+
+# publish_get_task_request
+pub_get_task_queues_count: 1
+pub_get_task_pool_min: 5
+pub_get_task_pool_max: 5
+pub_get_task_pool_start: 5
+
+# consumer_get_task_response
+cons_get_task_connections_per_queue: 1
+cons_get_task_channels_per_connection: 1
+cons_get_task_msg_prefetch_size: 50
+
+# publish_modify_request
+pub_modify_pool_min: 5
+pub_modify_pool_max: 5
+pub_modify_pool_start: 5
+
+# publish_settings
+pub_settings_pool_min: 5
+pub_settings_pool_max: 5
+pub_settings_pool_start: 5
+
+# consumer_settings
+cons_settings_connections_per_queue: 1
+cons_settings_channels_per_connection: 1
+cons_settings_msg_prefetch_size: 50
+
+# publish_to_worker_request
+pub_to_worker_pool_min: 5
+pub_to_worker_pool_max: 50
+pub_to_worker_pool_start: 5
+
+# consumer_shard_response
+cons_shard_connections_per_queue: 10
+cons_shard_channels_per_connection: 5
+cons_shard_msg_prefetch_size: 50
+
+# lager settings
+lager_console_backend: "debug"
+log_parts_count: 5
+log_parts_size: 734003200
+
+lager_error_size: "{{ log_parts_size }}"
+lager_error_count: "{{ log_parts_count }}"
+
+lager_info_size: "{{ log_parts_size }}"
+lager_info_count: "{{ log_parts_count }}"
+
+lager_crash_size: "{{ log_parts_size }}"
+lager_crash_count: "{{ log_parts_count }}"
+
+lager_error_logger_redirect: "true"
+lager_error_logger_hwm: 50
+lager_async_threshold: 20
+lager_async_threshold_window: 5

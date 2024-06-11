@@ -1,0 +1,256 @@
+[
+  %% SASL config
+  {sasl, [
+    {sasl_error_logger, {file, "log/sasl-error.log"}},
+    {errlog_type, error},
+    {error_logger_mf_dir, "log/sasl"},      % Log directory
+    {error_logger_mf_maxbytes, 10485760},   % 10 MB max file size
+    {error_logger_mf_maxfiles, 5}           % 5 files max
+  ]},
+  {lager, [
+    %% What handlers to install with what arguments
+    %% The defaults for the logfiles are to rotate the files when
+    %% they reach 10Mb or at midnight, whichever comes first, and keep
+    %% the last 31 rotations.
+    {handlers, [
+      {lager_file_backend, [{file, "log/error.log"}, {level, '=error'}, {size, 10485760}, {date, "$D0"}, {count, 5}]},     %% 10Mb
+      {lager_file_backend, [{file, "log/warning.log"}, {level, '=warning'}, {size, 10485760}, {date, "$D0"}, {count, 5}]}, %% 10Mb
+      {lager_file_backend, [{file, "log/info.log"}, {level, '=info'}, {size, 104857600}, {date, "$D0"}, {count, 10}]},     %% 100Mb
+      {lager_file_backend, [{file, "log/debug.log"}, {level, '=debug'}, {size, 104857600}, {date, "$D0"}, {count, 5}]}      %% 100Mb
+    ]},
+    %% What colors to use with what log levels
+    {colored, true},
+    {colors, [
+      {debug,     "\e[1;36m" },
+      {info,      "\e[0;38m" },
+      {notice,    "\e[1;36m" },
+      {warning,   "\e[1;33m" },
+      {error,     "\e[1;31m" }
+    ]},
+    %% Whether to write a crash log, and where.
+    %% Commented/omitted/undefined means no crash logger.
+    {crash_log, "log/crash.log"},
+    %% Maximum size in bytes of events in the crash log - defaults to 65536
+    {crash_log_msg_size, 65536},
+    %% Maximum size of the crash log in bytes, before its rotated, set
+    %% to 0 to disable rotation - default is 0
+    {crash_log_size, 10485760},
+    %% What time to rotate the crash log - default is no time
+    %% rotation.
+    {crash_log_date, "$D0"},
+    %% Number of rotated crash logs to keep, 0 means keep only the
+    %% current one - default is 0
+    {crash_log_count, 5},
+    %% Whether to redirect error_logger messages into lager - defaults to true
+    {error_logger_redirect, true},
+    %% How many messages per second to allow from error_logger before we start dropping them
+    {error_logger_hwm, 50},
+    %% How big the gen_event mailbox can get before it is switched into sync mode
+    {async_threshold, 20},
+    %% Switch back to async mode, when gen_event mailbox size decrease from `async_threshold'
+    %% to async_threshold - async_threshold_window
+    {async_threshold_window, 5}
+  ]},
+  {conveyor,  %conveyor for working with privat system
+    [
+      {convId, 1},
+      {secret, <<"secret">>},
+      {login, <<"1">>},
+      {url, <<"https://corezoid.loc/api/1/json/">>},
+      {callback, <<"http://callback.corezoid.loc/callback?">>}
+    ]
+  },
+  {create_cz_task,  %environment for sending data from prolog code
+    [
+      {url, <<"https://corezoid.loc/api/1/json/">>},
+      {attempts, 5} % attempts to create task successfully
+    ]
+  },
+  {prolog_database,
+    [
+      {prolog_data_pool, % pool for working with new database mongodb
+        [
+          {seed,
+            [
+              {host, "{{ mongodb_host }}"},
+              {port, {{ mongodb_port }}},
+              {deployment, single}
+            ]
+          },
+          {options,
+            [
+              {register, prolog_data_pool},
+              {pool_size, 10}, % pool size on start
+              {max_overflow, 0},  % number of overflow workers be created, when all workers from pool are busy
+              {overflow_ttl, 1000}, % number of milliseconds for overflow workers to stay in pool before terminating
+              {overflow_check_period, 1000}, % overflow_ttl check period for workers (in milliseconds)
+
+              {localThresholdMS, 1000}, % secondaries only which RTTs fit in window from lower RTT to lower RTT + localThresholdMS could be selected for handling user's requests
+
+              {connectTimeoutMS, 10000},
+              {socketTimeoutMS, 100},
+
+              {serverSelectionTimeoutMS, 10000}, % max time appropriate server should be select by
+              {waitQueueTimeoutMS, 1000}, % max time for waiting worker to be available in the pool
+
+              {heartbeatFrequencyMS, 10000},    %  delay between Topology rescans
+              {minHeartbeatFrequencyMS, 1000},
+
+              {rp_mode, primaryPreferred}, % default ReadPreference mode - primary, secondary, primaryPreferred, secondaryPreferred, nearest
+
+              {rp_tags, []} % tags that servers shoul be tagged by for becoming candidates for server selection  (may be an empty list)
+            ]
+          },
+          {worker_options,
+            [
+              {database, <<"{{ mongodb_deepmeo_db_name }}">>},
+              {login, <<"{{ mongodb_deepmemo_user }}">>},
+              {password, <<"{{ mongodb_deepmemo_password }}">>},
+              {auth_source, <<"{{ mongodb_deepmeo_db_name }}">>},
+              {w_mode, safe},
+              {r_mode, slave_ok}
+            ]
+          }
+        ]
+      },
+      {indexes, % interval for checking indexes created by collections
+        [
+          {checking_interval, 5000}
+        ]
+      },
+      {reconnect,
+        [
+          {intensity, infinity}, % количество попыток переустановки коннектов, после которых приложение тушим
+          {check_status_interval, 5000}, % временной интервал для проверок состояния коннектов в миллисекундах
+          {time_for_reconnecting, 10000}, % период времени в миллисекундах, за который пытаемся переустановить коннекты и если за это время не успеваем, то тушим приложение
+          {check_error_interval, 1000} % временной интервал для проверок в миллисекундах с момента первого обнаружения ошибки в коннектах
+        ]
+      },
+      {cache,
+        [
+          {cache, redis},
+          {cache_handler, pd_redis_man}
+        ]
+      },
+      {database,
+        [
+          {db, mongodb},
+          {db_handler, pd_mongodb_man}
+        ]
+      },
+      {fact_model,
+        [
+          {vsn, 2}, % int - версия данных, с которой планируем работать [0 - старая версия с IndexKey, 1 - версия с мультииндексом]
+          {fact_arity, 64}, % int - maximum allowable arity of facts (64 - default)
+          {arg_max_length, 128}, % int - max length of arg (128 - default)
+          {convert, false}, % boolean - признак необходимости конвертировать данные
+          {batch_size, 100}, % count of documents in batch for getting to convert
+          {work_node, "eprolog@127.0.0.1"} % it's node which will do conversion a format of facts and recover data into cache
+        ]
+      },
+      {available_memory_level, 80}
+    ]
+  },
+  {mongodb,
+    [
+      {mc_worker_call_timeout, 5000}
+    ]
+  },
+  {eredis_cluster,
+    [
+      {init_nodes,
+        [
+          {"{{ redis_host }}", {{redis_port}}}
+        ]
+      },
+      {pool_size, 5},
+      {pool_max_overflow, 0}
+    ]
+  },
+  {score_points, % score points for increment weight of fact for different operations
+    [
+      {insert, 5},
+      {update, 5},
+      {select, 10}
+    ]
+  },
+  {ep_hash_key,
+    [
+      {key, "one_hash"}
+    ]
+  },
+  {httpc_profiles,
+    [
+      {name, "eprolog_#"},
+      {size, 3}
+    ]
+  },
+%%  statistic
+  {ep_statistics_reporter_to_zabbix,
+    [
+      {status, off} % on | off
+    ]
+  },
+  {ep_statistics_reporter_to_conveyor,
+    [
+      {status, off} % on | off
+    ]
+  },
+%%  logging
+  {ep_batch_lager, %% activate the mode of writing logs as batch
+    [
+      {status, off} % on | off
+    ]
+  },
+  {ep_log_writer, %% activate the mode of writing logs to the db
+    [
+      {status, off} % on | off
+    ]
+  },
+  {write_to_log,
+    [
+      {more_then, 20} % in milliseconds
+    ]
+  },
+  {erlog_worker,
+    [
+      {max_heap_size, 25000000}
+    ]
+  },
+  {ermql, [
+    {disabled, false},
+    {publish_request, [
+      {servers, []},
+      {queues_count, 1},
+      {min_size, 1},
+      {max_size, 1},
+      {start_size, 1}
+    ]},
+    {consumer_response, [
+      {servers, []},
+      {connections_per_queue, 1},
+      {channels_per_connection, 1},
+      {messages_prefetch_size_per_channel, 50}
+    ]}
+  ]},
+  {ep_cowboy_pool,
+    [
+      {ip, {127, 0, 0, 1}}, %% cowboy listening ip
+      {port, 8081}, %% cowboy listening port
+      {acceptors, 5} %% number of cowboy accceptors
+    ]
+  },
+  {kernel,
+    [
+      {inet_dist_use_interface, {127, 0, 0, 1}},
+      {inet_dist_listen_min, 8000},
+      {inet_dist_listen_max, 9000}
+    ]
+  },
+    {standalone,
+        [
+            {status, true} % true - without corezoid | false - with corezoid
+        ]
+    }
+
+].

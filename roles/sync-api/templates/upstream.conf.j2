@@ -1,0 +1,5 @@
+upstream api-sync {
+{% for item in corezoid_api_sync_nginx.upstreams %}
+	server {{ item.host }}:{{ corezoid_api_sync.app_port }};
+{% endfor %}
+}

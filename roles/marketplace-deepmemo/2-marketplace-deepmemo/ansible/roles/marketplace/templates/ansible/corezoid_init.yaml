@@ -1,0 +1,230 @@
+- hosts: localhost
+  gather_facts: true
+
+  vars:
+    proto: https
+    nginx_limits: {
+      't2.medium': 'fifteen',
+      't2.large': 'twentyfive',
+      'c4.xlarge': 'fifty',
+      'c4.2xlarge': 'hundredten',
+      'c4.4xlarge': 'hundredforty',
+      'c5.large': 'fifty',
+      'c5.xlarge': 'fifty',
+      'c5.2xlarge': 'hundredten',
+      'c5.4xlarge': 'hundredforty'
+    }
+    nginx_limit_req: 15
+
+  handlers:
+    #be careful: handlers will always run in order they are defined, not in order they are listed in notify:
+    - name: restart rabbitmq-server
+      service:
+        name: rabbitmq-server
+        state: restarted
+      listen: "restart rabbitmq-server"
+
+    - name: restart license-server
+      service:
+        name: license-server
+        state: restarted
+      listen: "restart license-server"
+      ignore_errors: yes
+
+    - name: restart capi
+      service:
+        name: capi
+        state: restarted
+      listen: "restart capi"
+
+    - name: restart conveyor_api_multipart
+      service:
+        name: conveyor_api_multipart
+        state: restarted
+      listen: "restart conveyor_api_multipart"
+
+    - name: restart worker
+      service:
+        name: worker
+        state: restarted
+      listen: "restart worker"
+
+    - name: restart usercode
+      service:
+        name: usercode
+        state: restarted
+      listen: "restart usercode"
+
+    - name: restart http-worker
+      service:
+        name: http-worker
+        state: restarted
+      listen: "restart http-worker"
+
+
+  tasks:
+
+    - name: Set hostname
+      hostname:
+        name: "corezoid.loc"
+
+    - name: restart rabbitmq-server
+      service:
+        name: rabbitmq-server
+        state: restarted
+
+    - name: get ip from capi.conf
+      shell: 'cat /ebsmnt/conf/capi.config | grep {site | grep -Eoh "\"(.)*\"" | sed ''s/"//g'' | uniq'
+      register: capi_ip
+
+    - name: ip in capi.conf
+      debug: var=capi_ip.stdout
+
+    # - name: Enable access to GoogleMetada
+    #   raw: "{{ item }}"
+    #   with_items:
+    #     - "firewall-cmd --direct --remove-rule ipv4 filter OUTPUT 1 -o eth0 -d 169.254.169.254/32 -j DROP"
+    #   tags: qq
+
+    - name: get public ip from GoogleMetadata
+      shell: "wget -S -q -O - http://metadata/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip --header 'Metadata-Flavor: Google' 2> /dev/null"
+      register: public_ip
+      ignore_errors: yes
+      when:
+        - ansible_distribution == "CentOS" or ansible_distribution == "RedHat"
+        - ansible_distribution_major_version == "7"
+        - ansible_distribution == "Google"
+
+    # - name: Disable access to GoogleMetada
+    #   raw: "{{ item }}"
+    #   with_items:
+    #     - "firewall-cmd --direct --add-rule ipv4 filter OUTPUT 1 -o eth0 -d 169.254.169.254/32 -j DROP"
+    #   tags: qq
+
+
+    - name: get local ip from meta-data
+      shell: wget -S -q -O - http://169.254.169.254/latest/meta-data/local-ipv4 2>/dev/null
+      register: local_ip
+      when:
+        - ansible_distribution == "Amazon"
+
+    - name: get public_ip from meta-data
+      shell: wget -S -q -O - http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null
+      register: public_ip
+      when:
+        - ansible_distribution == "Amazon"
+
+    - name: get local ip
+      #      debug: var=ansible_default_ipv4.address
+      #      register: local_ip
+      set_fact: local_ip={{ ansible_default_ipv4.address }}
+      when:
+        - ansible_distribution == "CentOS" or ansible_distribution == "RedHat"
+        - ansible_distribution_major_version == "7"
+        - ansible_distribution != "Amazon"
+
+
+    - name: show localip
+      debug: var=local_ip.stdout
+
+    - name: show public_ip
+      debug: var=public_ip.stdout
+
+
+    - name: try assign public
+      set_fact: address={{ public_ip.stdout }}
+      when:
+       - public_ip != ""
+       - ansible_distribution == "Amazon"
+
+    - name: try assign public
+      set_fact: address={{ public_ip.stdout }}
+      when:
+        - public_ip.stdout != ""
+        - ansible_distribution == "CentOS" or ansible_distribution == "RedHat"
+        - ansible_distribution_major_version == "7"
+
+    - name: try assign local
+      set_fact: address={{ local_ip.stdout}}
+      when:
+        - public_ip.stdout == ""
+        - ansible_distribution == "CentOS" or ansible_distribution == "RedHat"
+        - ansible_distribution_major_version == "7"
+
+    - name: assignet ip
+      debug: var=address
+
+    # - name: get instance-type from meta-data
+    #   shell: curl -s http://169.254.169.254/latest/meta-data/instance-type
+    #   register: instance_type
+    #   when:
+    #     - ansible_distribution == "Amazon"
+
+    # - name: get accountId from meta-data
+    #   shell: wget -S -q -O - http://169.254.169.254/latest/dynamic/instance-identity/document/ 2>/dev/null
+    #   register: instance_doc
+    #   when:
+    #     - ansible_distribution == "Amazon"
+
+    # - name: generate import-data
+    #   template: src=files/import-data.j2 dest=/usr/local/bin/import-data owner=root group=root mode=755
+    #   when:
+    #     - ansible_distribution == "Amazon"
+
+    # - name: generate export-data
+    #   template: src=files/export-data.j2 dest=/usr/local/bin/export-data owner=root group=root mode=755
+    #   when:
+    #     - ansible_distribution == "Amazon"
+
+    - name: adjusting api_host in capi.config
+      lineinfile: dest=/ebsmnt/conf/capi.config regexp="api_host" line="        {api_host, \"https://{{ address }}/api\"},"
+      when:
+        - address != capi_ip.stdout
+        - address != ""
+
+    - name: adjusting admin_url1 in capi.config
+      lineinfile: dest=/ebsmnt/conf/capi.config regexp="admin_url1" line="        {admin_url1, \"https://{{ address }}\"},"
+      when:
+        - address != capi_ip.stdout
+        - address != ""
+
+    - name: adjusting admin_url2 in capi.config
+      lineinfile: dest=/ebsmnt/conf/capi.config regexp="admin_url2" line="        {admin_url2, \"https://{{ address }}\"},"
+      when:
+        - address != capi_ip.stdout
+        - address != ""
+
+    - name: adjusting ip in capi.config
+      shell: "sed -i s/{{ capi_ip.stdout }}/{{ address }}/ /ebsmnt/conf/capi.config"
+      when:
+        - address != capi_ip.stdout
+        - address != ""
+
+    - name: adjusting ip in conveyor_api_multipart.config
+      shell: "sed -i s/{{ capi_ip.stdout }}/{{ address }}/ /ebsmnt/conf/conveyor_api_multipart.config"
+      when:
+        - address != capi_ip.stdout
+        - address != ""
+
+#    - name: adjusting ip in health_check_server.config
+#      shell: "sed -i s/{{ capi_ip.stdout }}/{{ address }}/ /ebsmnt/conf/health_check_server.config"
+#      ignore_errors: yes
+#      when:
+#        - address != capi_ip.stdout
+#        - address != ""
+#        - health_check_server.results[0].yumstate == 'installed'
+
+    - name: adjusting ip in worker.config
+      shell: "sed -i s/{{ capi_ip.stdout }}/{{ address }}/ /ebsmnt/conf/worker.config"
+      notify:
+        - "restart rabbitmq-server"
+        - "restart license-server"
+        - "restart capi"
+        - "restart conveyor_api_multipart"
+        - "restart worker"
+        - "restart usercode"
+        - "restart http-worker"
+      when:
+        - address != capi_ip.stdout
+        - address != ""
+

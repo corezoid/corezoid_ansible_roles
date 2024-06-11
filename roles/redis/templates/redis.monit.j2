@@ -1,0 +1,17 @@
+check process {{ redis_counter_name }} with pidfile /var/run/redis/{{ redis_counter_name }}.pid
+   group redis
+   start program = "/sbin/service {{ redis_counter_name }} start" with timeout 15 seconds
+   stop  program = "/sbin/service {{ redis_counter_name }} stop"
+   if 15 restarts within 15 cycles then timeout
+
+check process {{ redis_cache_name }} with pidfile /var/run/redis/{{ redis_cache_name }}.pid
+   group redis
+   start program = "/sbin/service {{ redis_cache_name }} start" with timeout 15 seconds
+   stop  program = "/sbin/service {{ redis_cache_name }} stop"
+   if 15 restarts within 15 cycles then timeout
+
+check process {{ redis_timers_name }} with pidfile /var/run/redis/{{ redis_timers_name }}.pid
+   group redis
+   start program = "/sbin/service {{ redis_timers_name }} start" with timeout 15 seconds
+   stop  program = "/sbin/service {{ redis_timers_name }} stop"
+   if 15 restarts within 15 cycles then timeout

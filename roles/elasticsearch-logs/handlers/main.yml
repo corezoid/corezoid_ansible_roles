@@ -1,0 +1,4 @@
+---
+# handlers file for usercode
+- name: restart elasticsearch
+  service: name=elasticsearch state=restarted enabled=yes

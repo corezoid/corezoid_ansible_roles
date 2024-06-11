@@ -1,0 +1,6 @@
+[gcc]
+name=gcc
+baseurl=https://repo.middleware.biz/system/el7
+enabled=1
+gpgcheck=0
+priority=4

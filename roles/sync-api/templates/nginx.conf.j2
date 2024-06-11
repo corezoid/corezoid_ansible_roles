@@ -1,0 +1,53 @@
+user  nginx;
+worker_processes  auto;
+
+error_log  /var/log/nginx/error.log;
+#error_log  /var/log/nginx/error.log  notice;
+#error_log  /var/log/nginx/error.log  info;
+
+pid        /var/run/nginx.pid;
+
+events {
+    worker_connections  64000;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    #for long domain names
+    server_names_hash_bucket_size  128;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    log_format up_log '$server_addr\t$server_port\t$remote_addr\t$time_iso8601\tforward-to $upstream_addr\t$request\t$status\t$body_bytes_sent\t$request_time\t$upstream_response_time\t$http_referer\t$http_user_agent\t$http_cookie\t$host';
+
+    access_log  /var/log/nginx/access.log  up_log;
+
+    limit_req_zone $binary_remote_addr zone=static:20m rate=100r/s;
+    limit_req_zone $binary_remote_addr zone=fifteen:20m rate=15r/s;
+    limit_req_zone $binary_remote_addr zone=twentyfive:20m rate=25r/s;
+    limit_req_zone $binary_remote_addr zone=fifty:20m rate=50r/s;
+    limit_req_zone $binary_remote_addr zone=hundred:20m rate=100r/s;
+    limit_req_zone $binary_remote_addr zone=hundredten:20m rate=110r/s;
+    limit_req_zone $binary_remote_addr zone=twohundred:20m rate=200r/s;
+    limit_req_zone $binary_remote_addr zone=fivehundred:20m rate=500r/s;
+    limit_req_zone $binary_remote_addr zone=thousand:20m rate=1000r/s;
+
+    real_ip_header     X-Forwarded-For;
+    set_real_ip_from   0.0.0.0/0;
+
+    sendfile        on;
+    #tcp_nopush     on;
+    server_tokens off;
+
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    include /etc/nginx/conf.d/*.conf;
+
+}

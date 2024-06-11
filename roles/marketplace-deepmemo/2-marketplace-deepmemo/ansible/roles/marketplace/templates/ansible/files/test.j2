@@ -1,0 +1,5 @@
+{% if public_ip['stdout'] != '' %}
+{{ public_ip['stdout'] }} is current ip.
+{% else %}
+{{ local_ip['stdout'] }} is current ip.
+{% endif %}

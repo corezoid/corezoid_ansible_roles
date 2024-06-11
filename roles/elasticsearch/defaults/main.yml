@@ -1,0 +1,4 @@
+---
+# defaults file for elasticsearch
+
+version: "2.4"

@@ -1,0 +1,21 @@
+---
+
+- name: Setup deepmemo on one host
+  hosts: all
+  become: true
+  pre_tasks:
+    - name: Set version distribution if amazon detected
+      set_fact: ansible_distribution_major_version={{ aws_centos_distribution_major_version }}
+      when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "NA"
+  roles:
+    - general
+    - geerlingguy.nginx
+    - geerlingguy.redis
+    - mongo
+    - nginx.config
+    - mongo.config
+    - eprolog
+    - prolog-openapi
+    - exclude-updates
+  vars_files:
+    - env.yml

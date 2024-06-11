@@ -1,0 +1,115 @@
+#!/bin/sh
+# {{ item }}
+#
+# chkconfig:   35 98 02
+# description: {{ item }}
+# processname: {{ item }}
+# config:
+# pidfile: /var/run/{{ item }}/{{ item }}
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+ROOTFOLDER="/ebsmnt"
+ROOTFOLDER_CLEAN="ebsmnt"
+
+RUN_USER="app-user"
+
+APPNAME="{{ item }}"
+APPDIR="${ROOTFOLDER}/erlang/${APPNAME}"
+APPDIR_CLEAN="${ROOTFOLDER_CLEAN}/erlang/${APPNAME}"
+PIDHOME="/var/run/${APPNAME}"
+PIDFILE="${PIDHOME}/${APPNAME}.pid"
+LOCKFILE="/var/lock/subsys/${APPNAME}"
+
+START_SCRIPT="${APPDIR}/sa-build/bin/start"
+STOP_SCRIPT="${APPDIR}/sa-build/bin/stop"
+CONFIG_PATH="${ROOTFOLDER}/conf/${APPNAME}/config"
+START_SCRIPT_EXT="${START_SCRIPT} --NODE_CONFIG_DIR=${CONFIG_PATH}"
+STOP_SCRIPT_EXT="${STOP_SCRIPT} --NODE_CONFIG_DIR=${CONFIG_PATH}"
+
+NODETOOL="bin/nodetool"
+NODEDOMAIN="127.0.0.1"
+
+start() {
+    echo -n $"Starting ${APPNAME}: "
+
+    [ -d "${PIDHOME}" ] || { mkdir "${PIDHOME}"; chown ${RUN_USER}:${RUN_USER} ${PIDHOME};  }
+    cd ${APPDIR}"/sa-build"
+    daemon --user ${RUN_USER} ${START_SCRIPT_EXT}
+    # retval=$?
+    # echo
+    # [ $retval -eq 0 ] && touch ${LOCKFILE}
+    # [ $retval -eq 0 ] && sleep 2 && pgrep -f "${APPNAME}@${NODEDOMAIN} -setcookie ${APPNAME}" > ${PIDFILE}
+    # [ -s ${PIDFILE} ] || pgrep -f " ${APPNAME} " > ${PIDFILE}
+    # [ -s ${PIDFILE} ] || pgrep -f "progname ${APPDIR_CLEAN}/bin/${APPNAME}" > ${PIDFILE}
+    # return $retval
+}
+
+stop() {
+    echo -n $"Stopping ${APPNAME}: "
+    cd ${APPDIR}"/sa-build"
+    daemon --user ${RUN_USER} ${STOP_SCRIPT_EXT}
+    # retval=$?
+    # echo
+    # [ $retval -eq 0 ] && cleanup
+    # return $retval
+}
+
+cleanup() {
+    rm -f ${LOCKFILE}
+}
+
+restart() {
+    echo -n $"Restarting ${APPNAME}: "
+
+    [ -d "${PIDHOME}" ] || { mkdir "${PIDHOME}"; chown ${RUN_USER}:${RUN_USER} ${PIDHOME};  }
+    cd ${APPDIR}"/sa-build"
+    daemon --user ${RUN_USER} ${STOP_SCRIPT_EXT}
+    sleep 1
+    daemon --user ${RUN_USER} ${START_SCRIPT_EXT}
+    # retval=$?
+    # echo
+    # [ $retval -eq 0 ] && touch ${LOCKFILE}
+    # [ $retval -eq 0 ] && sleep 2 && pgrep -f "${APPNAME}@${NODEDOMAIN} -setcookie ${APPNAME}" > ${PIDFILE}
+    # return $retval
+}
+
+rh_status() {
+    status -p ${PIDFILE} ${START_SCRIPT_EXT}
+}
+
+rh_status_q() {
+    rh_status >/dev/null 2>&1
+}
+
+# reload() {
+#     echo -n $"Reloading ${APPNAME}: "
+#     su ${RUN_USER} -s /bin/bash -c "${RUN_SCRIPT_EXT} escript '${NODETOOL} -name ${APPNAME}@${NODEDOMAIN} -setcookie ${APPNAME} rpcterms live reload'"
+#     retval=$?
+#     echo
+#     return $retval
+# }
+case "$1" in
+    start)
+        rh_status_q && exit 0
+        $1
+        ;;
+    stop)
+        rh_status_q || (cleanup && exit 0)
+        $1
+        ;;
+    restart)
+        rh_status_q && stop
+        rh_status_q || (cleanup && start)
+        ;;
+    # reload)
+    #     rh_status_q && reload
+    #     ;;
+    status|status_q)
+        rh_$1
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart|reload}"
+        exit 2
+esac

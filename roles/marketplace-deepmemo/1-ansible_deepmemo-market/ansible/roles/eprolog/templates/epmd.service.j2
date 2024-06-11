@@ -1,0 +1,16 @@
+[Unit]
+Description=Erlang EPMD Daemon
+Wants=network.target
+After=network.target
+
+[Service]
+Type=forking
+WorkingDirectory=/ebsmnt/erlang/eprolog/bin
+Environment=HOME=/ebsmnt/erlang/eprolog
+ExecStartPre=/bin/sleep 10
+ExecStart=/ebsmnt/erlang/eprolog/erts-9.2/bin/epmd -address 127.0.0.1 -daemon
+Restart=always
+User=app-user
+
+[Install]
+WantedBy=multi-user.target

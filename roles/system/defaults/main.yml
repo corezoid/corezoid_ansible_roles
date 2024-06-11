@@ -1,0 +1,5 @@
+---
+# defaults file for system
+
+ipv6_config: "disable"
+autoscale: false

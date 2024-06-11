@@ -1,0 +1,11 @@
+---
+# handlers file for single_account
+# - name: restart single_account
+#   service: name=single_account state=restarted enabled=yes
+
+# - name: stop single_account
+#   service: name=single_account state=stopped enabled=yes
+
+# - name: start single_account
+#   service: name=single_account state=started enabled=yes
+

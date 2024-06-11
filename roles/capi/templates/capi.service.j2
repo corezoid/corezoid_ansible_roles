@@ -1,0 +1,39 @@
+[Unit]
+Description=Corezoid {{ item }} Application
+{% if box_server is defined and box_server %}
+After=network.target postgresql-{{ db_version }}.service redis.service redis2.service elasticsearch.service pgbouncer.service rabbitmq-server.service crond.service
+{% else %}
+After=network.target crond.service
+{% endif%}
+
+[Service]
+Type=forking
+PermissionsStartOnly=true
+
+User=app-user
+Group=app-user
+
+ExecStartPre=/bin/mkdir -p /var/run/capi
+ExecStartPre=/bin/chown app-user:app-user /var/run/capi
+
+Environment=CONFIG_PATH=/ebsmnt/conf/capi.config
+Environment=HOME=/ebsmnt/erlang/capi
+
+{% if ansible_distribution_version == "7.5" %}
+ExecStart=/ebsmnt/erlang/capi/bin/capi-1 start
+{% else %}
+ExecStart=/ebsmnt/erlang/capi/bin/capi-1 start
+{% endif %}
+ExecStartPost=/bin/sh -c 'echo $MAINPID > /var/run/capi/capi.pid'
+
+{% if ansible_distribution_version == "7.5" %}
+ExecStop=/ebsmnt/erlang/capi/bin/capi-1 stop
+{% else %}
+ExecStop=/ebsmnt/erlang/capi/bin/capi-1 stop
+{% endif %}
+ExecStopPost=/bin/sh -c 'rm -fr /var/run/capi/capi.pid'
+
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[aws-corezoid]
+name=Corezoid
+baseurl=https://{{ corezoid_repo_domain | default("repo.middleware.biz") }}/{{ yum_s3_bucket | default("corezoid") }}/{{ yum_s3_bucket_prefix }}
+enabled=1
+{% if corezoid_repo_domain is defined or corezoid_release < '5.3' %}
+gpgcheck=0
+{% else %}
+gpgcheck=1
+gpgkey=https://repo.middleware.biz/corezoid/RPM-GPG-KEY-Middleware
+{% endif %}
+priority=5

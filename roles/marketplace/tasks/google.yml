@@ -1,0 +1,27 @@
+- name: add instance_configs file
+  template: src=templates/{{ item }}.j2 dest=/etc/default/{{ item }} owner=root group=root mode=0655
+  with_items:
+    - "instance_configs.cfg"
+  when:
+    - marketplace_data.cloud == "Google"
+  tags:
+    - marketplace-google
+
+ - name: Regenerate /etc/default/instance_configs.cfg configuration file
+   shell: "/usr/bin/google_instance_setup"
+   when:
+     - marketplace_data.cloud == "Google"
+   tags:
+     - marketplace-google
+
+
+- name: Remove file (delete file)
+  file:
+    path: "/etc/default/{{ item }}"
+    state: absent
+  with_items:
+    - "instance_configs.cfg.template"
+  when:
+    - marketplace_data.cloud == "Google"
+  tags:
+    - marketplace-google

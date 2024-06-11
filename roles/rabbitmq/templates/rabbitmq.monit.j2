@@ -1,0 +1,6 @@
+check process rabbitmq with pidfile /var/run/rabbitmq/pid
+   group mq
+   start program = "/sbin/service rabbitmq-server start" with timeout 15 seconds
+   stop  program = "/sbin/service rabbitmq-server stop"
+   if failed port 5672 type tcp then restart
+   if 3 restarts within 3 cycles then timeout

@@ -1,0 +1,15 @@
+#!/bin/bash
+
+case $1 in
+
+    start_lic) date -d @`/ebsmnt/erlang/capi/erts-8.3.5.4/bin/escript /ebsmnt/certs/corezoid_license check "[{time_to_start, []}]." | grep -o '[[:digit:]]*'` '+%Y-%m-%d %H:%M:%S'
+    ;;
+    end_lic) date -d @`/ebsmnt/erlang/capi/erts-8.3.5.4/bin/escript /ebsmnt/certs/corezoid_license check "[{time_to_expire, []}]." | grep -o '[[:digit:]]*'` '+%Y-%m-%d %H:%M:%S'
+    ;;
+    max_rps_lic) /ebsmnt/erlang/capi/erts-8.3.5.4/bin/escript /ebsmnt/certs/corezoid_license check "[{max_rps, []}]." | grep -o '[[:digit:]]*'
+    ;;
+    max_active_procs_lic) /ebsmnt/erlang/capi/erts-8.3.5.4/bin/escript /ebsmnt/certs/corezoid_license check "[{max_active_procs, []}]." | grep -o '[[:digit:]]*'
+    ;;
+
+	*) echo "Usage: ${0} start_lic | end_lic | max_rps_lic | max_active_procs_lic"
+esac

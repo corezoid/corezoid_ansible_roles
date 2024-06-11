@@ -1,0 +1,213 @@
+---
+
+- name: Make folder for shared content
+  file: path={{ api_mult_file_f3_path_to_dir }} owner={{ app_user }} group={{ app_user }} state=directory mode=0755 recurse=yes
+  tags:
+    - api-multipart-all
+    - api-multipart-env
+
+- name: Make folder for versions
+  file: path={{ api_mult_file_f3_path_to_dir }}/versions owner={{ app_user }} group={{ app_user }} state=directory mode=0755 recurse=yes
+  tags:
+    - api-multipart-all
+    - api-multipart-env
+    -
+# - name: Mount EFS share
+#   mount:
+#     path: "{{ api_mult_file_f3_path_to_dir }}"
+#     src: "{{ efs_dns_name }}:/"
+#     fstype: nfs4
+#     opts: nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2
+#     state: mounted
+#   tags:
+#     - api-multipart-all
+#     - api-multipart-env
+
+- name: Yum clean all
+  command: yum clean all
+#  args:
+#    warn: false
+  tags:
+    - api-multipart-all
+    - api-multipart-install
+
+- name: Install conveyor_api_multipart app
+  yum:
+    name: "conveyor_api_multipart-{{ corezoid_release_app_version.mult }}"
+    state: present
+    update_cache: yes
+    disablerepo: "*"
+    enablerepo: "aws-corezoid"
+  tags:
+    - api-multipart-all
+    - api-multipart-install
+
+- name: Create Mult tmp_dir
+  file: path={{ mult_tmp_dir }} owner={{ app_user }} group={{ app_user }} state=directory
+  with_items:
+    - conveyor_api_multipart
+  tags:
+    - api-multipart-all
+    - api-multipart-install
+
+- name: Add log directory
+  file: path={{ top_dir }}/erlang/{{ item }}/log owner={{ app_user }} group={{ app_user }} state=directory
+  with_items:
+    - conveyor_api_multipart
+  tags:
+    - api-multipart-all
+    - api-multipart-install
+
+- name: Fix permission for conveyor_api_multipart
+  file: path={{ top_dir }}/erlang/{{ item }} owner={{ app_user }} group={{ app_user }} state=directory mode=0700 recurse=yes
+  with_items:
+    - conveyor_api_multipart
+  tags:
+    - api-multipart-all
+    - api-multipart-install
+
+- name: Make config folder
+  file: path={{ conf_dir }} owner=root group=root state=directory mode=0755
+  tags:
+    - api-multipart-all
+    - api-multipart-config
+
+- name: Create conveyor_api_multipart_config
+  template: src=templates/{{ corezoid_release }}-{{ item }}.config.j2 dest={{ api_mult_config }}
+  with_items:
+    - conveyor_api_multipart
+  tags:
+    - api-multipart-all
+    - api-multipart-config
+    - api-multipart-config-file
+
+- name: Fix permission to conveyor_api_multipart.config file
+  file: state=file path={{ api_mult_config }} owner={{ app_user }} group={{ app_user }} mode=0500
+  with_items:
+    - conveyor_api_multipart
+  when: ansible_host != "127.0.0.1"
+  tags:
+    - api-multipart-all
+    - api-multipart-config
+    - api-multipart-config-file
+
+- name: Create conveyor_api_multipart systemd
+  template: src=templates/{{ item }}.service.j2 dest=/etc/systemd/system/{{ item }}.service owner=root group=root mode=0644
+  with_items:
+    - conveyor_api_multipart
+  tags:
+    - api-multipart-all
+    - api-multipart-initd
+    - api-multipart-systemd
+  when:
+    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
+
+- name: check conveyor_api_multipart.service.d folder
+  stat:
+    path: "/etc/systemd/system/conveyor_api_multipart.service.d"
+  register: systemd_folder_check
+  tags:
+    - api-multipart-all
+    - api-multipart-app
+    - api-multipart-systemd
+
+- name: Setup app systemd
+  block:
+    - name: Make folder for static content
+      file:
+        path: "/etc/systemd/system/{{ item }}.service.d"
+        owner: root
+        group: root
+        state: directory
+        mode: 0755
+        recurse: yes
+      with_items:
+        - conveyor_api_multipart
+    - name: Reload systemctl
+      shell: systemctl daemon-reload
+  when:
+    - systemd_folder_check.stat.isreg is not defined
+    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS" or ansible_distribution == "Amazon"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
+  tags:
+    - api-multipart-all
+    - api-multipart-app
+    - api-multipart-systemd
+
+
+- name: check conveyor_api_multipart.service.d folder
+  stat:
+    path: "/etc/systemd/system/conveyor_api_multipart.service.d"
+  register: systemd2_folder_check
+  tags:
+    - api-multipart-all
+    - api-multipart-app
+    - api-multipart-systemd
+
+
+- name: Setup app systemd
+  block:
+    - name: Install limits file
+      template: src=templates/limits dest=/etc/systemd/system/{{ item }}.service.d/limits.conf owner=root group=root mode=0644
+      with_items:
+        - conveyor_api_multipart
+    - name: Reload systemctl
+      shell: systemctl daemon-reload
+  when:
+    # - systemd2_folder_check.stat.isreg
+    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS" or ansible_distribution == "Amazon"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
+  tags:
+    - api-multipart-all
+    - api-multipart-app
+    - api-multipart-systemd
+
+- name: Enable conveyor_api_multipart to survive reboot
+  service:
+    name: "{{ item }}"
+    enabled: yes
+    state: started
+    # no_block: yes
+  with_items:
+    - conveyor_api_multipart
+  tags:
+    - api-multipart-all
+    - api-multipart-initd
+    - api-multipart-initd-start
+
+- name: Change mult_id in config
+  cron:
+    special_time: reboot
+    name: "Change mult_id in config"
+    user: "root"
+    job: "rand_id=$(pwgen -n 20 -s 1); sed -i -e \"s/{{ mult_id }}/${rand_id}/g\" {{ api_mult_config }}"
+  when: autoscale
+  tags:
+    - capi-all
+    - capi-app
+    - capi-cron
+
+- name: Create monit file
+  template:
+    src: "templates/{{ item }}.monit.j2"
+    dest: "/etc/monit.d/{{ item }}"
+    owner: root
+    group: root
+    mode: 0600
+  with_items:
+    - conveyor_api_multipart
+  register: monit_file
+  tags:
+    - api-multipart-all
+    - api-multipart-monit
+
+- name: Reload monit if config file changed
+  service:
+    name: monit
+    state: reloaded
+  when: monit_file.changed
+  tags:
+    - capi-all
+    - capi-app
+    - capi-monit

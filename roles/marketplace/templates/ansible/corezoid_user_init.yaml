@@ -1,0 +1,129 @@
+- hosts: localhost
+  gather_facts: true
+
+  vars:
+    adm_login: "admin@corezoid.loc"
+    default_hash: "2fc5d93bca794e556681d83bb6728d12888f3104"
+    capi_config: "/ebsmnt/conf/capi.config"
+
+  handlers:
+    - name: restart capi
+      service:
+        name: capi
+        state: restarted
+      listen: "restart capi"
+
+  tasks:
+
+    - name: Register pwd is changed
+      stat:
+        path: /tmp/pwd.pid
+      register: stat_result
+
+    - name: Disable access to GoogleMetada
+      raw: "{{ item }}"
+      with_items:
+        - "firewall-cmd --direct --add-rule ipv4 filter OUTPUT 1 -o eth0 -d 169.254.169.254/32 -j DROP"
+      when:
+        - stat_result.stat.exists == True
+        - ansible_distribution == "Google"
+
+    - name: Check update password status
+      fail: msg="Password for admin@corezoid.loc already updated"
+      when: stat_result.stat.exists == True
+
+    - name: connectivity_check
+      become: yes
+      become_user: postgres
+      shell: "psql -p 5433 -U internal_user conveyor -Atc 'SELECT 1'"
+
+
+
+#    - name: get instance-id for AWS
+#       shell: wget -S -q -O - http://169.254.169.254/latest/meta-data/instance-id 2>/dev/null
+#       register: instance_id
+#       when: ansible_distribution == "Amazon"
+
+#     - name: Check that the google instance_configs.cfg exists
+#       stat:
+#         path: /etc/default/instance_configs.cfg
+#       register: instance_configs_result
+#
+#     - name: Enable access to GoogleMetada
+#       raw: "{{ item }}"
+#       with_items:
+#         - "firewall-cmd --direct --remove-rule ipv4 filter OUTPUT 1 -o eth0 -d 169.254.169.254/32 -j DROP"
+
+    - name: get instance-id for GCP
+      shell: "wget -S -q -O - http://metadata.google.internal/computeMetadata/v1/instance/id --header 'Metadata-Flavor: Google' 2> /dev/null"
+      register: instance_id
+      when:
+        - stat_result.stat.exists == True
+        - ansible_distribution == "Google"
+
+    # - name: Disable access to GoogleMetada
+    #   raw: "{{ item }}"
+    #   with_items:
+    #     - "firewall-cmd --direct --add-rule ipv4 filter OUTPUT 1 -o eth0 -d 169.254.169.254/32 -j DROP"
+
+#    - name: get pwd for VMWare
+#      shell: echo "HelloMiddleware"
+#      register: instance_id
+#      when:
+#        - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+#        - ansible_distribution_major_version == "7"
+
+    - name: get current auth_hash from capi.config
+      shell: sed -n -e 's/^\([[:space:]]*{[[:space:]]*corezoid_auth_hash,[[:space:]]*<<\"\)\(.*\)">>[[:space:]]*\},/\2/p' {{ capi_config }}
+      register: corezoid_adm_hash
+
+
+    - name: get current admin hash
+      become: yes
+      become_user: postgres
+      shell: "psql -p 5433 -U internal_user conveyor -Atc \"SELECT hash1 FROM logins WHERE login = '{{ adm_login }}'\""
+      register: current_hash
+
+
+    - ec2_metadata_facts:
+      when: ansible_distribution == "Amazon"
+
+    - set_fact:
+        inst_id={{ ansible_ec2_instance_id }}
+      when: ansible_distribution == "Amazon"
+
+    - name: inst id
+      debug: var=inst_id
+      when: ansible_distribution == "Amazon"
+
+    - name: adm hash
+      debug: var=corezoid_adm_hash.stdout
+
+    - name: cur hash
+      debug: var=current_hash.stdout
+    ## шаблон для всего кроме авс
+#    - set_fact:
+#        inst_id={{ instance_id.stdout }}
+
+    - set_fact:
+        adm_hash={{ corezoid_adm_hash.stdout }}
+        cur_hash={{ current_hash.stdout }}
+
+    # get_cz_user_hash - custom function in filter_plugins, ANSIBLE_FILTER_PLUGIN
+    - set_fact:
+        new_hash={{ [adm_login, adm_hash, inst_id] | get_cz_user_hash }}
+
+    - name: change default password
+      become: yes
+      become_user: postgres
+      shell: "psql -p 5433  -U internal_user conveyor -Atc \"UPDATE logins SET hash1 = '{{ new_hash }}' WHERE login = '{{ adm_login }}'\""
+      #    when: cur_hash == "{{ default_hash }}"
+      notify: "restart capi"
+      when: stat_result.stat.exists == False
+
+    - name: Check that the pwd is changed
+      file:
+        path: /tmp/pwd.pid
+        state: touch
+      when: stat_result.stat.exists == False
+

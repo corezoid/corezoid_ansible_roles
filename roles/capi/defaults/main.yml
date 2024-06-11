@@ -1,0 +1,16 @@
+---
+# defaults file for capi
+corezoid_web_port: 9081
+
+capi_prometheus_port: 9104
+
+capi_port: 9080
+capi_max_reqs_limit: 10
+capi_api_max_threads: 200
+capi_cluster_port: 5571
+
+
+capi_es_host: "127.0.0.1"
+capi_es_port: 9200
+
+conf_agent_server_port: 8585

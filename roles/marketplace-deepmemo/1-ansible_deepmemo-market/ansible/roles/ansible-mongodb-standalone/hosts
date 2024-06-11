@@ -1,0 +1,21 @@
+# Environments
+[all:vars]
+ansible_user="alexfedorets"
+ansible_host="10.70.6.9"
+#ansible_port="{{ lookup('env','METRO_ANSIBLE_PORT') }}"
+#ansible_become_pass="{{ lookup('env','METRO_ANSIBLE_BECOME_PASS') }}"
+
+# The mongo servers need a mongod_port variable set, and they must not conflict.
+[mongod_servers]
+db-mongo mongod_host=10.70.6.9 mongod_port=27017
+
+
+# The list of servers where replication should happen, by default include all servers
+[replication_servers:children]
+mongod_servers
+
+# Redis servers list for /etc/hosts file provision just
+#[redis_servers]
+#stor-sender-1-1.cz-test.pbu.icb redis_host=127.0.0.1 redis_port=6000
+#stor-sender-1-2.cz-test.pbu.icb redis_host=127.0.0.1 redis_port=6001
+#stor-sender-1-3.cz-test.pbu.icb redis_host=127.0.0.1 redis_port=6002

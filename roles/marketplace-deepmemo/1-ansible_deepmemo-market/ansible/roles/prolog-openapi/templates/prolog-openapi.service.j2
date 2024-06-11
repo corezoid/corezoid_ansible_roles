@@ -1,0 +1,21 @@
+[Unit]
+Description=Prolog open api
+Wants=network.target
+After=network.target
+After=epmd.service
+Requires=epmd.service
+
+[Service]
+Type=simple
+WorkingDirectory={{ work_dir }}/erlang/prolog-openapi/bin
+Environment=CONFIG_PATH={{ work_dir }}/conf/prolog-openapi.config
+Environment=APPDIR={{ work_dir }}/erlang/prolog-openapi
+Environment=HOME={{ work_dir }}/erlang/prolog-openapi
+Environment=PATH=/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/app-user/.local/bin:/home/app-user/bin
+ExecStartPre=/bin/sleep 15
+ExecStart={{ work_dir }}/erlang/prolog-openapi/bin/prolog_open_api_2 start
+Restart=always
+User=app-user
+
+[Install]
+WantedBy=multi-user.target

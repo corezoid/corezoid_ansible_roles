@@ -1,0 +1,14 @@
+#!/bin/bash
+
+WHICH="/usr/bin/which"
+FIND=$($WHICH find)
+RM=$($WHICH rm)
+
+PATH_TO_LOGS="/var/log/elasticsearch/"
+MTIME=2
+LOGS_FORMAT="*.log.*"
+
+for LOGS in $(${FIND} ${PATH_TO_LOGS} -type f -mtime +${MTIME} -name "${LOGS_FORMAT}");
+do
+	${RM} -fr ${LOGS}
+done

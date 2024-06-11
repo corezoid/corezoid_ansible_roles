@@ -1,0 +1,44 @@
+[Unit]
+Description=Corezoid {{ item }} Application
+{% if box_server is defined and box_server %}
+After=network.target postgresql-{{ db_version }}.service redis.service redis2.service elasticsearch.service pgbouncer.service rabbitmq-server.service
+{% else %}
+After=network.target crond.service
+{% endif%}
+
+[Service]
+#The type could be different , depends on many things
+#not necessary but if it uses pid file - describe it
+Type=forking
+PermissionsStartOnly=true
+
+User=app-user
+Group=app-user
+
+ExecStartPre=/bin/mkdir -p /var/run/conveyor_api_multipart
+ExecStartPre=/bin/chown app-user:app-user /var/run/conveyor_api_multipart
+
+Environment=CONFIG_PATH=/ebsmnt/conf/conveyor_api_multipart.config
+Environment=HOME=/ebsmnt/erlang/conveyor_api_multipart
+
+{% if ansible_distribution_version == "7.5" %}
+ExecStart=/ebsmnt/erlang/conveyor_api_multipart/bin/conveyor_api_multipart start
+{% else %}
+ExecStart=/ebsmnt/erlang/conveyor_api_multipart/bin/conveyor_api_multipart start
+{% endif %}
+ExecStartPost=/bin/sh -c 'echo $MAINPID > /var/run/conveyor_api_multipart/conveyor_api_multipart.pid'
+
+{% if ansible_distribution_version == "7.5" %}
+ExecStop=/ebsmnt/erlang/conveyor_api_multipart/bin/conveyor_api_multipart stop
+{% else %}
+ExecStop=/ebsmnt/erlang/conveyor_api_multipart/bin/conveyor_api_multipart stop
+{% endif %}
+ExecStopPost=/bin/sh -c 'rm -fr /var/run/conveyor_api_multipart/conveyor_api_multipart.pid'
+
+#Automatic restart by systemd
+Restart=always
+#Time for system to wait before restart
+#Restartsec=42s
+
+[Install]
+WantedBy=multi-user.target

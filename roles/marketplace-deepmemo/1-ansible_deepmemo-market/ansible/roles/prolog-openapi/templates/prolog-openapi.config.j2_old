@@ -1,0 +1,214 @@
+[
+  %% SASL config
+  {sasl, [
+    {sasl_error_logger, {file, "log/sasl-error.log"}},
+    {errlog_type, error},
+    {error_logger_mf_dir, "log/sasl"},      % Log directory
+    {error_logger_mf_maxbytes, 10485760},   % 10 MB max file size
+    {error_logger_mf_maxfiles, 5}           % 5 files max
+  ]},
+  {lager, [
+    %% What handlers to install with what arguments
+    %% The defaults for the logfiles are to rotate the files when
+    %% they reach 10Mb or at midnight, whichever comes first, and keep
+    %% the last 31 rotations.
+    {handlers, [
+         {lager_console_backend, debug},
+         {lager_file_backend, [{file, "log/error.log"}, {level, '=error'}, {size, 104857600}, {date, "$D0"}, {count, 5}]},     %% 100Mb
+         {lager_file_backend, [{file, "log/warning.log"}, {level, '=warning'}, {size, 104857600}, {date, "$D0"}, {count, 5}]}, %% 100Mb
+         {lager_file_backend, [{file, "log/info.log"}, {level, '=info'}, {size, 1073741824}, {date, "$D0"}, {count, 10}]},     %% 1Gb
+         {lager_file_backend, [{file, "log/debug.log"}, {level, '=debug'}, {size, 104857600}, {date, "$D0"}, {count, 5}]}      %% 100Mb
+    ]},
+    %% Whether to write a crash log, and where.
+    %% Commented/omitted/undefined means no crash logger.
+    {crash_log, "log/crash.log"},
+    %% Maximum size in bytes of events in the crash log - defaults to 65536
+    {crash_log_msg_size, 65536},
+    %% Maximum size of the crash log in bytes, before its rotated, set
+    %% to 0 to disable rotation - default is 0
+    {crash_log_size, 10485760},
+    %% What time to rotate the crash log - default is no time
+    %% rotation.
+    {crash_log_date, "$D0"},
+    %% Number of rotated crash logs to keep, 0 means keep only the
+    %% current one - default is 0
+    {crash_log_count, 5},
+    %% Whether to redirect error_logger messages into lager - defaults to true
+    {error_logger_redirect, true},
+    %% How many messages per second to allow from error_logger before we start dropping them
+    {error_logger_hwm, 50},
+    %% How big the gen_event mailbox can get before it is switched into sync mode
+    {async_threshold, 20},
+    %% Switch back to async mode, when gen_event mailbox size decrease from `async_threshold'
+    %% to async_threshold - async_threshold_window
+    {async_threshold_window, 5}
+  ]},
+  {sysmon,  %conveyor for reporting statistics
+    [
+      { {{prolog_openapi_namespace}}, false}
+    ]
+  },
+  {es_stats,
+    [
+      { {{prolog_openapi_namespace}}, false}
+    ]
+  },
+  {poa_cowboy_pool,
+    [
+      {port, {{poa_cowboy_port}}}, %% cowboy listening port
+      {acceptors, 100} %% number of cowboy accceptors
+    ]
+  },
+  {poa_debugger_pool,  %debugger conf
+    [
+      {port, 4232},
+      {listeners, 10}
+    ]
+  },
+  {poa_console_pool,  %console mode conf
+    [
+      {port, 4233},
+      {listeners, 10}
+    ]
+  },
+  {ep_data_pool, % pool for working with new database mongo 3.0
+    [
+      { {{prolog_openapi_namespace}},
+        [
+          [
+            {host, "{{ mongodb_host }}"},
+            {port, "{{ mongodb_port }}"},
+            {deployment, single}
+          ],
+          [
+            {register, ep_data_pool},
+            {pool_size, {{ poa_mongodb_pool_size }}},
+            {max_overflow, 0},
+            {localThresholdMS, 1000},
+            {connectTimeoutMS, 20000},
+            {socketTimeoutMS, 100},
+            {serverSelectionTimeoutMS, 20000},
+            {waitQueueTimeoutMS, 1000},
+            {heartbeatFrequencyMS, 10000},
+            {minHeartbeatFrequencyMS, 1000},
+            {rp_mode, primaryPreferred},
+            {rp_tags, []}
+          ],
+          [
+            {database, <<"{{ mongodb_deepmeo_db_name }}">>},
+            {login, <<"{{ mongodb_deepmemo_user }}">>},
+            {auth_source, <<"{{ mongodb_deepmeo_db_name }}">>},
+            {password, <<"{{ mongodb_deepmemo_password }}">>},
+            {w_mode, safe}
+          ]
+        ]
+      }
+    ]
+  },
+{ep_cache_pool,  % pool for cache workers with redis
+     [
+       { {{prolog_openapi_namespace}},
+         [
+           {eredis_cluster,
+             [
+               {init_nodes,
+                 [
+                   {"{{ redis_host }}", {{redis_port}}}
+                 ]
+               },
+               {pool_size, 5},
+               {pool_max_overflow, 0}
+             ]
+           }
+         ]
+       }
+     ]
+},
+  {ep_balancer_conf, % настройки сервера балансировки запросов к нодам eprolog
+    [
+      {sync_interval, 1000},            % Интервал с которым сервер балансировки будет синхронизировать активные ноды из mongo в локальную ets
+      {delete_err_node_interval, 1000}, % Интервал для проверки значений счетчиков ошибочных запросов
+      {count_err_repeat, 100}           % Граничное значение счетчика ошибочных запросов к ноде EProlog, по достижению которога нода будет удалена
+    ]
+  },
+  {poa_acc_conf,
+    [
+      {send_to_conveyor_esc_msg_interval, 60000},  % отправка в конвейер эскалаций и входящих запросов в милисекундах
+      {send_to_conveyor_req_params_interval, 500}  % отправка в конвейер параметров запроса и ответа API
+    ]
+  },
+  {poa_docs_cleaner_conf,
+    [
+      {crons_starting_time, {2, 10, 0}},
+      {batch, 1000},
+      {working_node, [
+        "prolog_open_api@127.0.0.1"
+      ]}
+    ]
+  },
+  {poa_collection_separator_conf,
+    [
+      {working_node, [
+        "prolog_open_api@127.0.0.1"
+      ]}
+    ]
+  },
+  {httpc_profiles,
+    [
+      { {{prolog_openapi_namespace}},
+        [
+          {stack, 5000},
+          {name, "httpc_profile_#"},
+          {size, 25},
+          {poa_dashboard,
+            [
+              {size, 100},
+              {max_overflow, 0}
+            ],
+            [
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {debug_ws_pool,
+    [
+      {size, 200},
+      {max_overflow, 0}
+    ]
+  },
+  {poa_security_setting,
+    [
+      {status, off}
+    ]
+  },
+  {poa_query_params_saver,
+    [
+      {status, off}
+    ]
+  },
+  {ep_write_to_log,
+    [
+      {more_then, 100} % in milliseconds
+    ]
+  },
+  {parser,
+    [
+      { {{prolog_openapi_namespace}}, old}
+    ]
+  },
+  {conf_namespace,
+    [
+      {conf, {{prolog_openapi_namespace}}}
+    ]
+  },
+  {reconnect,
+     [
+       {intensity, infinity}, % количество попыток переустановки коннектов, после которых приложение тушим
+       {check_status_interval, 5000}, % временной интервал для проверок состояния коннектов в миллисекундах
+       {time_for_reconnecting, infinity}, % период времени в миллисекундах, за который пытаемся переустановить коннекты и если за это время не успеваем, то тушим приложение
+       {check_error_interval, 1000} % временной интервал для проверок в миллисекундах с момента первого обнаружения ошибки в коннектах
+     ]
+  }
+].

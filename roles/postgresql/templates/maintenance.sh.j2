@@ -1,0 +1,126 @@
+#!/bin/bash
+PATH=${PATH}:/usr/pgsql-{{ db_version }}/bin
+
+DBNAMES=$(echo cp{0..9})
+#PGARGS="--port 5433 -h POSTGRES_RDS_ENDPOINT_CF"
+PGARGS="--port 5433"
+#PGARGS2="-p 5433  -h POSTGRES_RDS_ENDPOINT_CF"
+PGARGS2="-p 5433"
+PG_BIN_PATH="/usr/pgsql-{{ db_version }}/bin"
+PG_DATA="/var/lib/pgsql/{{ db_version }}/data/base"
+SCRIPTS="/var/lib/pgsql/scripts"
+
+R_LOG="${SCRIPTS}/reglament.log"
+
+cd ${SCRIPTS} || exit 1
+
+check_exist_pgdb(){
+    local DB
+    DB="$1"
+    nohup 1>/dev/null 2>/dev/null psql ${PGARGS} ${DB} -c 'select 1' || { echo "connection to ${DB} failed"; exit 1; }
+}
+
+truncate_all(){
+    for DBNAME in ${DBNAMES}
+    do
+        WRAP_PID=$(psql ${PGARGS} -Atc "select pid from pg_stat_activity where datname = '${DBNAME}' and query = 'autovacuum: VACUUM public.tasks_archive (to prevent wraparound)'")
+        [ -z "${WRAP_PID}" ] || { psql ${PGARGS} -c "select pg_cancel_backend(${WRAP_PID})"; }
+        echo -n "${DBNAME} "
+        psql ${PGARGS} ${DBNAME} -c "TRUNCATE tasks_archive"
+    done
+    for DBNAME in ${DBNAMES}
+    do
+        WRAP_PID=$(psql ${PGARGS} -Atc "select pid from pg_stat_activity where datname = '${DBNAME}' and query = 'autovacuum: VACUUM public.tasks_history (to prevent wraparound)'")
+        [ -z "${WRAP_PID}" ] || { psql ${PGARGS} -c "select pg_cancel_backend(${WRAP_PID})"; }
+        echo -n "${DBNAME} "
+        psql ${PGARGS} ${DBNAME} -c "TRUNCATE tasks_history"
+    done
+}
+
+truncate_tasks_history(){
+    for DBNAME in ${DBNAMES}
+    do
+        WRAP_PID=$(psql ${PGARGS} -Atc "select pid from pg_stat_activity where datname = '${DBNAME}' and query = 'autovacuum: VACUUM public.tasks_history (to prevent wraparound)'")
+        [ -z "${WRAP_PID}" ] || { psql ${PGARGS} -c "select pg_cancel_backend(${WRAP_PID})"; }
+        echo -n "${DBNAME} "
+        psql ${PGARGS} ${DBNAME} -c "TRUNCATE tasks_history"
+    done
+}
+
+check_bloat_tables(){
+    for DBNAME in ${DBNAMES}
+    do
+        check_exist_pgdb "${DBNAME}"
+        #TABLES=$(psql ${PGARGS} ${DBNAME} -Atc "SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        TABLES="tasks"
+        for TABLE in ${TABLES}
+        do
+            echo "${DBNAME}|${TABLE}|$(psql ${PGARGS} ${DBNAME} -Atc "SELECT free_percent FROM pgstattuple('${TABLE}')")"
+        done
+    done
+}
+
+repack_shards(){
+    local ${TABLE}
+    TABLE="$1"
+    for DBNAME in ${DBNAMES}
+    do
+        check_exist_pgdb "${DBNAME}"
+
+        WRAP_PID=$(psql ${PGARGS} -Atc "select pid from pg_stat_activity where datname = '${DBNAME}' and query = 'autovacuum: VACUUM public.tasks (to prevent wraparound)'")
+        [ -z "${WRAP_PID}" ] || { psql ${PGARGS} -c "select pg_cancel_backend(${WRAP_PID})"; }
+
+        echo "Running pg_repack for tasks in ${DBNAME}"
+        pg_repack ${PGARGS2} -d ${DBNAME} --table ${TABLE} || exit 1
+    done
+}
+
+dbsize(){
+    oid2name="${PG_BIN_PATH}/oid2name ${PGARGS2}"
+    pg_data_path="${PG_DATA}"
+    $oid2name | grep 'pg_default'| while read oid name tablespace; do
+    size=`du -h -s $pg_data_path/$oid|cut -f1`
+    echo "$size $name"
+    done
+}
+
+top_tables() {
+    if [ ! -z "${1}" ]; then
+        DB=${1}
+    else
+        echo "ERROR :: Database not defined"
+        exit 1
+    fi
+    [ ! -z "${SCHEMA}" ] || { SCHEMA='public'; }
+
+    psql ${PGARGS} ${DB} -c "SELECT schemaname,tablename,
+        pg_size_pretty(pg_relation_size(schemaname || '.' || tablename)) AS size_p,
+        pg_total_relation_size(schemaname || '.' || tablename) AS size,
+        pg_size_pretty(pg_total_relation_size(schemaname || '.' || tablename)) AS total_size_p,
+        pg_total_relation_size(schemaname || '.' || tablename) - pg_relation_size(schemaname || '.' || tablename) AS index_size,
+        (100*(pg_total_relation_size(schemaname || '.' || tablename) - pg_relation_size(schemaname || '.' || tablename)))/CASE WHEN pg_total_relation_size(schemaname || '.' || tablename) = 0 THEN 1 ELSE pg_total_relation_size(schemaname || '.' || tablename) END || '%' AS index_pct FROM pg_tables where schemaname = '${SCHEMA}' ORDER BY size DESC LIMIT 20"
+}
+
+
+case "$1" in
+    truncate_all)
+        truncate_all
+    ;;
+    truncate_tasks_history)
+        truncate_tasks_history
+    ;;
+    check_bloat)
+        check_bloat_tables
+    ;;
+    repack_shards)
+        repack_shards "tasks"
+    ;;
+    dbsize)
+        dbsize
+    ;;
+    top)
+        top_tables "$2"
+    ;;
+	*)
+	echo "Usage: ${0} { truncate_all | truncate_tasks_history |check_bloat | repack_shards | top }"
+esac

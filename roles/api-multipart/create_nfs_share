@@ -1,0 +1,32 @@
+mkdir /opt/ebsmnt_share
+chmod -R 755 /opt/ebsmnt_share
+
+chown nfsnobody:nfsnobody /opt/ebsmnt_share
+
+systemctl enable rpcbind
+systemctl enable nfs-server
+systemctl enable nfs-lock
+systemctl enable nfs-idmap
+systemctl start rpcbind
+systemctl start nfs-server
+systemctl start nfs-lock
+systemctl start nfs-idmap
+
+
+vim /etc/exports
+
+/opt/ebsmnt_share    *(rw,sync,no_root_squash,no_all_squash)
+
+
+systemctl restart nfs-server
+
+_______________________________
+
+mount -t nfs 10.150.132.45:/ebsmnt/certs /ebsmnt_share
+
+yum install nfs-utils
+
+srv-pCZNFZapp-0000.creditdnepr.int:/opt/certs    /ebsmnt/certs    nfs defaults 0 0
+
+
+mkdir -p /ebsmnt/certs && echo "srv-pCZNFZapp-0000.creditdnepr.int:/opt/certs    /ebsmnt/certs    nfs defaults 0 0" >> /etc/fstab && mount -a && df -h

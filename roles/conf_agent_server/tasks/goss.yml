@@ -1,0 +1,20 @@
+---
+- name: Copy goss tests
+  template:
+    dest: "/etc/goss.d/{{ item }}"
+    src: "tests/{{ item }}"
+    owner: root
+    group: root
+    mode: 0444
+  tags:
+    - goss_tests
+  with_items:
+    - "conf_agent_server.yml"
+
+- name: Test conf_agent_server
+  command: goss --gossfile "/etc/goss.d/{{ item }}" validate
+#    ignore_errors: yes
+  with_items:
+    - "conf_agent_server.yml"
+  tags:
+    - goss_tests

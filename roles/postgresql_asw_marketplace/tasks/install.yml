@@ -1,0 +1,315 @@
+- name: set minute for cron clean tasks archive
+  set_fact: tasks_archive_cron_minute=0
+  when: tasks_archive_cron_minute is not defined
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-cron
+
+- name: set hour for cron clean tasks archive
+  set_fact: tasks_archive_cron_hour=20
+  when: tasks_archive_cron_hour is not defined
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-cron
+
+- name: set weekday for cron clean tasks archive
+  set_fact: tasks_archive_cron_weekday="*"
+  when: tasks_archive_cron_weekday is not defined
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-cron
+
+- name: Yum clean all
+  command: yum clean all
+  args:
+    warn: false
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+#- name: Install centos-release-scl for PostgreSQL 13 packages
+#  yum:
+#    name: "{{ item }}"
+#    state: present
+#    update_cache: yes
+#  with_items:
+#    - centos-release-scl
+#  when:
+#    - ansible_distribution != "Amazon"
+#    - pgdg13 is defined
+#  tags:
+#    - postgresql-all
+ #   - postgresql-install-packages
+
+- name: Install PostgreSQL packages
+  yum: name={{ item }} state=present update_cache=yes
+  with_items:
+    - postgresql{{ db_ver }}
+    - postgresql{{ db_ver }}-server
+    - postgresql{{ db_ver }}-contrib
+#    - postgresql{{ db_ver }}-test
+    - pg_repack{{ db_ver }}
+  when: ansible_distribution != "Amazon"
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+- name: Install PostgreSQL packages
+  yum: name={{ item }} state=present update_cache=yes
+  with_items:
+    - postgresql
+    - postgresql-server
+    - postgresql-contrib
+#    - postgresql-test
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+- name: enable postgresql to survive reboot
+  service: name={{ item }} enabled=yes
+  with_items:
+    - postgresql
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+  tags:
+    - postgresql-all
+    - postgresql-install
+
+- name: enable postgresql{{ db_ver }} to survive reboot
+  service: name={{ item }} enabled=yes
+  with_items:
+    - postgresql-{{ db_version }}
+  when: ansible_distribution != "Amazon"
+  tags:
+    - postgresql-all
+    - postgresql-install
+
+- name: Add config to /etc/sysconfig/pgsql/
+  template:
+    src: templates/sysconfig-postgresql.j2
+    dest: /etc/sysconfig/pgsql/postgresql-{{ db_version }}
+  when: ansible_distribution != "Amazon"
+  tags:
+    - postgresql-all
+    - postgresql-install
+
+- name: Creates top directory for postgres
+  # strategy: debug
+  file:
+    path: "{{ top_db_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+    # recurse: yes
+  tags:
+    - postgresql-all
+    - postgresql-create-dirs
+
+- name: Creates db directory for postgres
+  file:
+    path: "{{ db_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: 0700
+  tags:
+    - postgresql-all
+    - postgresql-create-dirs
+
+- name: ensure wheel group
+  lineinfile:
+    regexp: '# %wheel	ALL=(ALL)	NOPASSWD: ALL'
+    path: /etc/sudoers
+    line: '%wheel	ALL=(ALL)	NOPASSWD: ALL'
+  tags:
+    - postgresql-all
+    - postgresql-add-sudoers
+
+- name: Check if PostgreSQL database is initialized.
+  stat:
+    path: "{{ db_dir }}/{{ db_version }}/data/PG_VERSION"
+  register: pgdata_dir_version
+  tags:
+    - postgresql-all
+    - postgresql-initdb
+
+- name: Init DB
+  become: true
+  become_user: postgres
+  when:
+    - not pgdata_dir_version.stat.exists
+    - ansible_distribution != "Amazon"
+  shell: /usr/pgsql-{{ db_version }}/bin/initdb -D {{ db_dir }}/{{ db_version }}/data
+  args:
+    executable: /bin/bash
+  tags:
+    - postgresql-all
+    - postgresql-initdb
+
+- name: Install aws-psycopg2
+  when:
+    - not pgdata_dir_version.stat.exists
+    - ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+  pip:
+    name: aws-psycopg2
+    executable: pip-3.7
+  tags:
+    - postgresql-all
+    - postgresql-initdb
+
+- name: Init DB AMI2
+  become: true
+  become_user: postgres
+  when:
+    - not pgdata_dir_version.stat.exists
+    - ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+  shell: initdb -D {{ db_dir }}/{{ db_version }}/data
+  args:
+    executable: /bin/bash
+  tags:
+    - postgresql-all
+    - postgresql-initdb
+
+
+- name: Delete default pgsql directory
+  file:
+    path: "/var/lib/pgsql"
+    state: absent
+  when:
+    - not pgdata_dir_version.stat.exists
+  tags:
+    - postgresql-all
+    - postgresql-create-dirs
+
+- name: Create link to pgsql directory
+  file:
+    src: "/postgresqldata/pgsql"
+    dest: "/var/lib/pgsql"
+    state: link
+    owner: postgres
+    group: postgres
+    mode: 0700
+  tags:
+    - postgresql-all
+    - postgresql-create-dirs
+
+- name: Add .bashrc file
+  template: src=templates/bashrc.j2 dest={{ db_dir }}/.bashrc mode=0660 owner=postgres
+  tags:
+    - postgresql-all
+    - postgresql-create-files
+
+- name: Add pg_hba.conf
+  template: src=templates/pg_hba-box.conf.j2 dest={{ db_dir }}/{{ db_version }}/data/pg_hba.conf mode=0700 owner=postgres
+  tags:
+    - postgresql-all
+    - postgresql-config-files
+
+- name: Add postgresql.conf
+  template:
+    src: "templates/postgresql-box-{{ db_version }}.conf.j2"
+    dest: "{{ db_dir }}/{{ db_version }}/data/postgresql.conf"
+    mode: 0700
+    owner: postgres
+  # when:
+  #   - db_replica_enable is not defined
+  #   - not db_replica_enable
+  tags:
+    - postgresql-all
+    - postgresql-config-files
+
+# - name: Add postgresql.conf
+#   template:
+#     src: "templates/postgresql-box-{{ db_version }}_replica.conf.j2"
+#     dest: "{{ db_dir }}/{{ db_version }}/data/postgresql.conf"
+#     mode: 0700
+#     owner: postgres
+#   when:
+#     - db_replica_enable is defined
+#     - db_replica_enable
+#   tags:
+#     - postgresql-all
+#     - postgresql-config-files
+
+- name: Start database service
+  service:
+    name: "{{ item }}"
+    state: started
+  with_items:
+    - postgresql-{{ db_version }}
+  when: ansible_distribution != "Amazon"
+
+  tags:
+    - postgresql-all
+    - postgresql-start-db
+
+- name: Start database service AMI2
+  block:
+    - name: fix sysv
+      lineinfile:
+        regexp: '^Environment=PGDATA'
+        path: /usr/lib/systemd/system/postgresql.service
+        line: 'Environment=PGDATA=/postgresqldata/pgsql/13/data'
+    - name: Reload systemctl
+      shell: systemctl daemon-reload
+    - name: Start database service on AMI2
+      service: name={{ item }} state=started
+      with_items:
+        - postgresql
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+  tags:
+    - postgresql-all-333
+    - postgresql-start-db
+
+
+
+- name: Create scripts folder
+  file:
+    path: "{{ db_dir }}/scripts"
+    state: directory
+    mode: 0755
+    owner: postgres
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+
+- name: Add maintenance.sh
+  template:
+    src: "templates/maintenance.sh.j2"
+    dest: "{{ db_dir }}/scripts/maintenance.sh"
+    mode: 0700
+    owner: postgres
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-file
+
+- name: Add cron for cleaning DB
+  cron:
+    name: "clean history and archives"
+    user: postgres
+    minute: "{{ tasks_archive_cron_minute }}"
+    hour: "{{ tasks_archive_cron_hour }}"
+    weekday: "{{ tasks_archive_cron_weekday }}"
+    job: "cd {{ db_dir }}/scripts; bash maintenance.sh truncate_all"
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-cron
+
+
+- name: Add cron for cleaning tasks_history
+  cron:
+    name: "Clean history"
+    user: postgres
+    minute: 0
+    hour: 21
+    job: "cd {{ db_dir }}/scripts; bash maintenance.sh truncate_tasks_history"
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-cron

@@ -1,0 +1,92 @@
+#!/bin/bash
+
+WHICH="/usr/bin/which"
+CURL=$($WHICH curl)
+GREP=$($WHICH grep)
+DATE=$($WHICH date)
+AWK=$($WHICH awk)
+
+# TODAY=$(${DATE} -d "today" '+%Y.%m.%d')
+DOMAIN="localhost"
+PORT=9200
+
+INDEX_TEMPLATE="capierrorlog-"
+
+NEXT_HOUR=$(${DATE} --date="1 hours" +"%Y-%m-%d-%H")
+#NEXT_HOUR=$(${DATE} +"%Y-%m-%d-%H")
+
+INDEX_NAME="${INDEX_TEMPLATE}${NEXT_HOUR}"
+
+
+INDEX_PRESENT=$(${CURL} -s 'localhost:9200/_cat/indices?v'  | ${GREP} open | ${GREP} -c ${INDEX_NAME})
+
+if [ ${INDEX_PRESENT} -eq 0 ];
+then
+        ${CURL} -XPUT "http://${DOMAIN}:${PORT}/${INDEX_NAME}"
+
+        ${CURL} -H 'Content-Type: application/json' -XPUT -d '
+{
+  "logs" : {
+    "properties" :
+      {
+        "@timestamp" : {
+          "type" : "date",
+          "format" : "strict_date_optional_time||epoch_millis||yyyy-MM-dd"
+        },
+        "message" : {
+          "properties" : {
+            "obj" : {
+              "type" : "string",
+              "index": "not_analyzed"
+            },
+            "request_size" : {
+              "type" : "integer"
+            },
+            "obj_type" : {
+              "type" : "string",
+              "index": "not_analyzed"
+            },
+            "message_type" : {
+              "type" : "string",
+              "index": "not_analyzed"
+            },
+            "user_id" : {
+              "type" : "integer"
+            },
+            "request" : {
+              "type" : "string",
+              "index": "not_analyzed"
+            },
+            "response" : {
+              "type" : "string",
+              "index": "not_analyzed"
+            },
+            "api_id" : {
+              "type" : "string",
+              "index": "not_analyzed"
+            },
+            "string" : {
+              "type" : "string",
+              "index": "not_analyzed"
+            },
+            "int" : {
+              "type" : "string",
+              "index": "not_analyzed"
+            }
+          }
+        }
+     }
+  }
+}
+' http://${DOMAIN}:${PORT}/${INDEX_NAME}/logs/_mapping
+
+fi
+
+#______________________DELETE OLD INDEX_________________________#
+
+NEXT_HOUR=$(${DATE} --date="20 hours ago" +"%Y-%m-%d-%H")
+
+INDEX_NAME="${INDEX_TEMPLATE}${NEXT_HOUR}"
+
+${CURL} -XDELETE http://${DOMAIN}:${PORT}/${INDEX_NAME}/
+#______________________DELETE OLD INDEX_________________________#

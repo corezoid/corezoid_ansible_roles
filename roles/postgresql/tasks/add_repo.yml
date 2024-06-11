@@ -1,0 +1,83 @@
+- debug:
+    msg: "{{ ansible_distribution }}"
+  tags:
+    - postgresql-all
+    - postgresql-repo
+    - postgresql-getdist
+
+- debug:
+    msg: "{{ ansible_distribution_major_version }}"
+  tags:
+    - postgresql-all
+    - postgresql-repo
+    - postgresql-getdist
+
+- debug:
+    msg: "{{ ansible_default_ipv4.address }}"
+  tags:
+    - postgresql-all
+    - postgresql-repo
+    - postgresql-getdist
+
+- debug:
+    msg: "{{ ansible_os_family }}"
+  tags:
+    - postgresql-all
+    - postgresql-repo
+    - postgresql-getdist
+
+- debug:
+    msg: "{{ ansible_distribution_version }}"
+  tags:
+    - postgresql-all
+    - postgresql-repo
+    - postgresql-getdist
+
+
+- name: Add PgSQL13 and PgSQL15 repo for RHEL/CentOS 7/8
+  yum:
+    name: https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+    state: installed
+    validate_certs: no  # Добавлено для отключения проверки SSL-сертификата
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8"
+  tags:
+    - yum-all
+    - postgresql-repo
+    - postgresql-repo-13-el7
+    - postgresql-repo-15-el7
+
+- name: Install PostgreSQL {{ db_ver }} repo
+  yum_repository:
+    name: PostgreSQL{{ db_ver }}
+    description: PostgreSQL{{ db_ver }}
+    baseurl: https://download.postgresql.org/pub/repos/yum/{{ db_ver }}/redhat/rhel-7-x86_64
+    gpgkey: https://download.postgresql.org/pub/repos/yum/RPM-GPG-KEY-PGDG-{{ db_ver }}
+    gpgcheck: no
+    enabled: yes
+  when:
+    - ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+
+- name: Install PostgreSQL {{ db_ver }} repo
+  yum_repository:
+    name: PostgreSQL{{ db_ver }}
+    description: PostgreSQL{{ db_ver }}
+    baseurl: https://download.postgresql.org/pub/repos/yum/{{ db_ver }}/redhat/rhel-9-x86_64
+    gpgcheck: no
+    enabled: yes
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "9"
+ 
+- name: Disable the built-in PostgreSQL module
+  command: dnf -qy module disable postgresql
+  args:
+    warn: false
+  when:
+    - pgdg15 is defined or pgdg13 is defined
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "8"
+  tags:
+    - yum-all
+    - postgresql-repo

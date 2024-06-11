@@ -1,0 +1,21 @@
+[Unit]
+Description=MongoDB Database Service
+Wants=network.target
+After=network.target
+
+[Service]
+Type=forking
+PermissionsStartOnly=true
+PIDFile=/var/run/mongodb/mongod.pid
+ExecStartPre=/bin/mkdir -p {{ mongodb_db_path }}
+ExecStartPre=/bin/chown {{ mongodb_user }}:{{ mongodb_group }} {{ mongodb_db_path }}
+ExecStartPre=/bin/mkdir -p /var/run/mongodb
+ExecStartPre=/bin/chown {{ mongodb_user }}:{{ mongodb_group }} /var/run/mongodb
+ExecStart=/usr/bin/mongod --config /etc/mongod.conf
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+User={{ mongodb_user }}
+Group={{ mongodb_group }}
+
+[Install]
+WantedBy=multi-user.target

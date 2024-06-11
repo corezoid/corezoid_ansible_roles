@@ -1,0 +1,114 @@
+- name: Yum clean all
+  command: yum clean all
+#  args:
+#    warn: false
+  tags:
+    - corezoid_limits-all
+    - corezoid_limits-app
+    - corezoid_limits-install
+
+- name: Install package corezoid_limits
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+    disablerepo: "*"
+    enablerepo: "aws-corezoid"
+  with_items:
+    - corezoid_limits-{{ corezoid_release_app_version.corezoid_limits }}
+  tags:
+    - corezoid_limits-all
+    - corezoid_limits-app
+    - corezoid_limits-install
+
+- name: add log directory
+  file: path={{ top_dir }}/erlang/{{ item }}/log owner={{ app_user }} group={{ app_user }} state=directory mode=0700
+  with_items:
+    - corezoid_limits
+  tags:
+    - corezoid_limits-all
+    - corezoid_limits-app
+    - corezoid_limits-install
+
+- name: fix permission
+  file:
+    path: "{{ top_dir }}/erlang/{{ item }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    state: directory
+    mode: '0700'
+    recurse: yes
+  with_items:
+    - corezoid_limits
+  when: ansible_host != "127.0.0.1"
+  tags:
+    - corezoid_limits-all
+    - corezoid_limits-app
+    - corezoid_limits-install
+
+- name: Create corezoid_limits config file
+  template:
+    src: "templates/{{ corezoid_release }}-{{ item }}.config.j2"
+    dest: "{{ corezoid_limits_config }}"
+  with_items:
+    - corezoid_limits
+  tags:
+    - corezoid_limits-all
+    - corezoid_limits-app
+    - corezoid_limits-config-file
+
+- name: Fix permission to corezoid_limits.config file
+  file: state=file path={{ corezoid_limits_config }} owner={{ app_user }} group={{ app_user }} mode=0500
+  with_items:
+    - corezoid_limits
+  when: ansible_host != "127.0.0.1"
+  tags:
+    - corezoid_limits-all
+    - corezoid_limits-app
+    - corezoid_limits-config-file
+
+- name: Setup app systemd
+  template: src=templates/{{ item }}.service.j2 dest=/etc/systemd/system/{{ item }}.service owner=root group=root mode=0644
+  with_items:
+    - corezoid_limits
+  tags:
+    - corezoid_limits-all
+    - corezoid_limits-app
+    - corezoid_limits-systemd
+  when:
+    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
+
+- name: Enable corezoid_limits to survive reboot
+  service:
+    name: "{{ item }}"
+    enabled: yes
+    state: started
+    # no_block: yes
+  with_items:
+    - corezoid_limits
+  tags:
+    - corezoid_limits-all
+    - corezoid_limits-app
+    - corezoid_limits-initd
+    - corezoid_limits-initd-start
+
+- name: Create monit file
+  template: src=templates/{{ item }}.monit.j2 dest=/etc/monit.d/{{ item }} owner=root group=root mode=0600
+  with_items:
+    - corezoid_limits
+  register: monit_file
+  tags:
+    - corezoid_limits-all
+    - corezoid_limits-app
+    - corezoid_limits-monit
+
+- name: Reload monit if config file changed
+  service:
+    name: monit
+    state: reloaded
+  when: monit_file.changed
+  tags:
+    - corezoid_limits-all
+    - corezoid_limits-app
+    - corezoid_limits-monit

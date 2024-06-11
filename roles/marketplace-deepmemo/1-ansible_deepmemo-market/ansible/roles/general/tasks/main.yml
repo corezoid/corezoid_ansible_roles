@@ -1,0 +1,94 @@
+---
+# tasks file for general
+- name: Add work user
+  user:
+    name: "{{ work_user }}"
+    append: yes
+
+- name: Install middleware repo prod
+  copy:
+    src: "middleware.repo"
+    dest: "/etc/yum.repos.d/middleware.repo"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: upgrade all packages
+  yum:
+    name: '*'
+    state: latest
+
+- name: Setup epel packgaes
+  raw: amazon-linux-extras install epel -y
+
+- name: Setup general packgaes
+  yum:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - mlocate
+    - mc
+    - iotop
+    - htop
+    - strace
+    - net-tools
+    - ntp
+    - policycoreutils-python
+    - nmap-ncat
+    - python-pip
+    - python-devel
+
+- name: Star ntp service
+  service:
+    name: ntpd
+    state: started
+    enabled: yes
+
+- name: Create working directory
+  file:
+    path: "{{ work_dir }}"
+    state: directory
+    owner: "{{ work_user }}"
+    mode: 0755
+
+- name: Create config directory
+  file:
+    path: "{{ work_dir }}/{{ config_dir }}"
+    state: directory
+    owner: "{{ work_user }}"
+    mode: 0755
+
+- name: Copy new zlib to /lib64
+  copy:
+    src: libz.so.1.2.11.1
+    dest: /lib64/libz.so.1.2.11.1
+    owner: root
+    group: root
+    mode: 0644
+
+
+- name: Copy script for changing symlinks on new version
+  copy:
+    src: change_symlink.sh
+    dest: /tmp/change_symlink.sh
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Start script
+  shell: bash /tmp/change_symlink.sh
+  tags:
+    - skip_ansible_lint
+
+- name: Create symlink for old libtinfo
+  raw: /bin/ln -s /usr/lib64/libtinfo.so.6.0 /usr/lib64/libtinfo.so.5
+  ignore_errors: True
+
+
+
+- name: correct system limits
+  pam_limits: domain=* limit_type=- limit_item={{ item.name }} value={{ item.value }}
+  with_items:
+  - { "name": "nofile", "value": "512000" }
+  - { "name": "nproc", "value": "64000" }
+  when: (ansible_distribution == "CentOS" or ansible_distribution == "RedHat")

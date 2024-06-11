@@ -1,0 +1,9 @@
+---
+# defaults file for mongo
+mongodb_bind_ip: "127.0.0.1"
+mongodb_port: "27017"
+mongodb_user: "mongod"
+mongodb_group: "mongod"
+mongodb_admin_password: "qwertY12345"
+
+

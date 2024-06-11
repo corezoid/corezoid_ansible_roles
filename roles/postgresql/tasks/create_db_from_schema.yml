@@ -1,0 +1,180 @@
+# - set_fact:
+#     local_db: "{{ item }}"
+
+- name: set name for the main db sql file
+  set_fact:
+    local_db_schema: "{{ schema_path }}/{{ schema_path_suffix }}/{{ corezoid_release }}/init/{{ local_db }}.sql"
+    remote_db_schema: "/tmp/{{ local_db }}.sql"
+  when: local_db | regex_replace('[0-9]+$', '') != 'cp'
+  tags:
+    - debug-tunnel-var
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: set name for the shard's sql file
+  set_fact:
+    local_db_schema: "{{ schema_path }}/{{ schema_path_suffix }}/{{ corezoid_release }}/init/cp.sql"
+    remote_db_schema: "/tmp/cp.sql"
+  when: local_db | regex_replace('[0-9]+$', '') == 'cp'
+  tags:
+    - debug-tunnel-var
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: deploy schema files to remote host
+  copy:
+    src: "{{ local_db_schema }}"
+    dest: "{{ remote_db_schema }}"
+    owner: postgres
+    group: postgres
+    mode: 0644
+  when:
+    - not ssh_tunnel
+    - not aws_rds
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+# "{{ (ssh_tunnel) | ternary("{{ local_db_schema }}","{{ remote_db_schema }}") }}"
+- name: set schema name for ssh_tunnel
+  set_fact:
+    db_schema: "{{ ssh_tunnel | ternary(local_db_schema,remote_db_schema) }}"
+  tags:
+    - debug-tunnel-var
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: set schema name for ssh_tunnel
+  set_fact:
+    db_schema: "{{ aws_rds | ternary(local_db_schema,remote_db_schema) }}"
+  tags:
+    - debug-tunnel-var
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- debug: msg={{ db_schema }}
+
+- name: ensure tables exist in {{ local_db }}
+  become: yes
+  become_user: postgres
+  # sudo_user: postgres
+  shell: psql -p {{ db_main.port }} -U postgres {{ local_db }} -Atc "SELECT COUNT(1) FROM pg_stat_user_tables"
+  register: check_db_tables
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: deploy db schema for {{ local_db }}
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} -U postgres {{ local_db }} -f {{ db_schema }}
+  when:
+    - check_db_tables.stdout == "0"
+    - check_db_tables.rc == 0
+  register: result
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: grant privileges on all tables in {{ local_db }}
+  postgresql_privs: >
+    db={{ local_db }}
+    privs={{ item.privs }}
+    objs=ALL_IN_SCHEMA
+    schema=public
+    type={{ item.obj_type }}
+    role={{ item.name }}
+    port={{ db_main.port }}
+    grant_option=no
+  with_items:
+    - { name: "appusers", obj_type: "table", privs: "SELECT,INSERT,UPDATE,DELETE" }
+    - { name: "appusers", obj_type: "sequence", privs: "SELECT,UPDATE" }
+    - { name: "viewers", obj_type: "table", privs: "SELECT" }
+    - { name: "viewers", obj_type: "sequence", privs: "SELECT" }
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: check the trial payment plan exists
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} -U postgres {{ local_db }} -Atc "SELECT COUNT(1) FROM payment_plans WHERE title = 'trial'"
+  register: check_payment_plan
+  when:
+    - local_db == 'conveyor'
+  tags:
+    - debug-payment-plan
+    - pgsql-all
+    - pgsql-deploy-schema
+    - pgsql-deploy-schema-trial
+
+# - debug: msg={{ check_payment_plan }}
+#   tags:
+#     - debug-payment-plan
+
+- name: insert initial data
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} -U postgres {{ local_db }} -Atc "INSERT INTO payment_plans VALUES (1, 'trial', '1', 0, 15, 1000000, 'usd', 'interval');"
+  when:
+    - local_db == 'conveyor'
+    - check_payment_plan.stdout == "0"
+    - check_payment_plan.rc == 0
+  tags:
+    - debug-payment-plan
+    - pgsql-all
+    - pgsql-deploy-schema
+    - pgsql-deploy-schema-trial
+# - debug: var=hostvars[inventory_hostname]
+
+- name: create extension postgres_fdw
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} -U postgres {{ local_db }} -Atc "CREATE extension IF NOT EXISTS postgres_fdw;"
+  when:
+    - local_db == 'cp'
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: create extension pgcrypto
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} -U postgres {{ local_db }} -Atc "CREATE EXTENSION IF NOT EXISTS pgcrypto; with q As (select id, count(*) over (partition by conveyor_id, uuid) as c from nodes), q1 AS( select * from q WHERE c>1) UPDATE nodes SET uuid = gen_random_uuid() FROM q1 WHERE nodes.id = q1.id; with q As (select id, count(*) over (partition by dashboard_id, uuid) as c from charts), q1 AS (select * from q WHERE c>1) UPDATE charts SET uuid = gen_random_uuid() FROM q1 WHERE charts.id = q1.id;"
+  when:
+    - local_db == 'cp'
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: GRANT postgres_fdw
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} -U postgres {{ local_db }} -Atc "GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO {{ db_main.user }}"
+  when:
+    - local_db == 'cp'
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: Alter table conveyor_fdw
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} postgres -U postgres -d {{ local_db }} -Atc "alter table conveyor_fdw OWNER TO {{ db_main.user }};"
+  when:
+    - local_db == 'conveyor'
+  tags:
+    - pgsql-all
+    - pgsql-alter-table-conveyor_fdw
+
+# - name: Add extensions cascade
+#   community.general.postgresql_ext:
+#     name: "{{ item }}"
+#     db: "{{ local_db }}"
+#     cascade: true
+#   with_items:
+#     - "pg_repack"
+#     - "pgstattuple"
+#   tags:
+#     - pgsql-all
+#     - pgsql-extensions

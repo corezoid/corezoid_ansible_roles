@@ -1,0 +1,379 @@
+- name: set minute for cron clean tasks archive
+  set_fact: tasks_archive_cron_minute=0
+  when: tasks_archive_cron_minute is not defined
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-cron
+
+- name: set hour for cron clean tasks archive
+  set_fact: tasks_archive_cron_hour=20
+  when: tasks_archive_cron_hour is not defined
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-cron
+
+- name: set weekday for cron clean tasks archive
+  set_fact: tasks_archive_cron_weekday="*"
+  when: tasks_archive_cron_weekday is not defined
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-cron
+
+- name: Yum clean all
+  command: yum clean all
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+#- name: Install centos-release-scl for PostgreSQL 13 packages
+#  yum:
+#    name: "{{ item }}"
+#    state: present
+#    update_cache: yes
+#  with_items:
+#    - centos-release-scl
+#  when:
+#    - ansible_distribution != "Amazon"
+#    - pgdg13 is defined
+#  tags:
+#    - postgresql-all
+#    - postgresql-install-packages
+#
+#- name: Copy postgresql repo
+#  copy:
+#    src: pgdg-redhat-all.repo
+#    dest: /etc/yum.repos.d/pgdg-redhat-all.repo
+##  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"   #Отключал когда инсталил на centos7, возможно на ami нужно будет включить, если включить тогда переделать when
+#  tags:
+#    - postgresql-all
+#    - postgresql-install-packages
+
+    
+- name: Copy postgresql repo Oracl Linux
+  copy:
+    src: oracllinux_pg13.repo
+    dest: /etc/yum.repos.d/oracllinux_pg13.repo
+  when:
+    - ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "8"
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+- name: Disable PostgreSQL module using dnf command
+  command: "dnf -y module disable postgresql"
+  when:
+    - ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "8"
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+#- name: Copy postgresql repo
+#  copy:
+#    src: pgdg-redhat-all-centos-8.repo
+#    dest: /etc/yum.repos.d/pgdg-redhat-all-centos-8.repo
+#  when:
+#    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS"
+#    - ansible_distribution_major_version == "8"
+#  tags:
+#    - postgresql-all
+#    - postgresql-install-packages
+
+- name: Install PostgreSQL packages
+  yum: name={{ item }} state=present update_cache=yes
+  with_items:
+    - postgresql{{ db_ver }}
+    - postgresql{{ db_ver }}-server
+    - postgresql{{ db_ver }}-contrib
+    - pg_repack_{{ db_ver }}
+  when: ansible_distribution != "Amazon"
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+- name: Install PostgreSQL packages
+  yum: name={{ item }} state=present update_cache=yes
+  with_items:
+    - postgresql{{ db_ver }}
+    - postgresql{{ db_ver }}-server
+    - postgresql{{ db_ver }}-contrib
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+- name: Install PostgreSQL packages
+  yum: name={{ item }} state=present update_cache=yes
+  with_items:
+    - postgresql{{ db_ver }}
+    - postgresql{{ db_ver }}-server
+    - postgresql{{ db_ver }}-contrib
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+- name: enable postgresql to survive reboot
+  service: name={{ item }} enabled=yes
+  with_items:
+    - postgresql
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+  tags:
+    - postgresql-all
+    - postgresql-install
+
+- name: enable postgresql to survive reboot
+  service: name={{ item }} enabled=yes
+  with_items:
+    - postgresql-{{ db_ver }}
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+  tags:
+    - postgresql-all
+    - postgresql-install
+
+- name: enable postgresql{{ db_ver }} to survive reboot
+  service: name={{ item }} enabled=yes
+  with_items:
+    - postgresql-{{ db_version }}
+  when: ansible_distribution != "Amazon"
+  tags:
+    - postgresql-all
+    - postgresql-install
+
+- name: Add config to /etc/sysconfig/pgsql/
+  template:
+    src: templates/sysconfig-postgresql.j2
+    dest: /etc/sysconfig/pgsql/postgresql-{{ db_version }}
+  when: ansible_distribution != "Amazon"
+  tags:
+    - postgresql-all
+    - postgresql-install
+
+- name: Creates top directory for postgres
+  file:
+    path: "{{ top_db_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+  tags:
+    - postgresql-all
+    - postgresql-create-dirs
+
+- name: Creates db directory for postgres
+  file:
+    path: "{{ db_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: 0700
+  tags:
+    - postgresql-all
+    - postgresql-create-dirs
+
+- name: ensure wheel group
+  lineinfile:
+    regexp: '# %wheel	ALL=(ALL)	NOPASSWD: ALL'
+    path: /etc/sudoers
+    line: '%wheel	ALL=(ALL)	NOPASSWD: ALL'
+  tags:
+    - postgresql-all
+    - postgresql-add-sudoers
+
+- name: Check if PostgreSQL database is initialized.
+  stat:
+    path: "{{ db_dir }}/{{ db_version }}/data/PG_VERSION"
+  register: pgdata_dir_version
+  tags:
+    - postgresql-all
+    - postgresql-initdb
+
+- name: Init DB
+  become: true
+  become_user: postgres
+  when:
+    - not pgdata_dir_version.stat.exists
+    - ansible_distribution != "Amazon"
+  shell: /usr/pgsql-{{ db_version }}/bin/initdb -D {{ db_dir }}/{{ db_version }}/data --locale=en_US.UTF-8
+  args:
+    executable: /bin/bash
+  tags:
+    - postgresql-all
+    - postgresql-initdb
+
+- name: Install aws-psycopg2
+  when:
+    - not pgdata_dir_version.stat.exists
+    - ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+  pip:
+    name: aws-psycopg2
+    executable: pip-3.7
+  tags:
+    - postgresql-all
+    - postgresql-initdb
+
+- name: Init DB AMI2
+  become: true
+  become_user: postgres
+  when:
+    - not pgdata_dir_version.stat.exists
+    - ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+  shell: /usr/pgsql-{{ db_version }}/bin/initdb -D {{ db_dir }}/{{ db_version }}/data --locale=en_US.UTF-8
+  args:
+    executable: /bin/bash
+  tags:
+    - postgresql-all
+    - postgresql-initdb
+
+- name: Init DB AMI3
+  become: true
+  become_user: postgres
+  when:
+    - not pgdata_dir_version.stat.exists
+    - ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+  shell: /usr/bin/initdb -D {{ db_dir }}/{{ db_version }}/data --locale=en_US.UTF-8
+  args:
+    executable: /bin/bash
+  tags:
+    - postgresql-all
+    - postgresql-initdb
+
+- name: Delete default pgsql directory
+  file:
+    path: "/var/lib/pgsql"
+    state: absent
+  when:
+    - not pgdata_dir_version.stat.exists
+  tags:
+    - postgresql-all
+    - postgresql-create-dirs
+
+- name: Create link to pgsql directory
+  file:
+    src: "{{ db_dir }}"
+    dest: "/var/lib/pgsql"
+    state: link
+    owner: postgres
+    group: postgres
+    mode: 0700
+  tags:
+    - postgresql-all
+    - postgresql-create-dirs
+
+- name: Add .bashrc file
+  template: src=templates/bashrc.j2 dest={{ db_dir }}/.bashrc mode=0660 owner=postgres
+  tags:
+    - postgresql-all
+    - postgresql-create-files
+
+- name: Add pg_hba.conf
+  template: src=templates/pg_hba-box.conf.j2 dest={{ db_dir }}/{{ db_version }}/data/pg_hba.conf mode=0700 owner=postgres
+  tags:
+    - postgresql-all
+    - postgresql-config-files
+
+- name: Add postgresql.conf
+  template:
+    src: "templates/postgresql-box-{{ db_version }}.conf.j2"
+    dest: "{{ db_dir }}/{{ db_version }}/data/postgresql.conf"
+    mode: 0700
+    owner: postgres
+  # when:
+  #   - db_replica_enable is not defined
+  #   - not db_replica_enable
+  tags:
+    - postgresql-all
+    - postgresql-config-files
+
+- name: Start database service
+  service:
+    name: "{{ item }}"
+    state: started
+  with_items:
+    - postgresql-{{ db_version }}
+  when: ansible_distribution != "Amazon"
+  tags:
+    - postgresql-all
+    - postgresql-start-db
+
+- name: Start database service AMI2
+  block:
+    - name: Reload systemctl
+      shell: systemctl daemon-reload
+    - name: Start database service on AMI2
+      service: name={{ item }} state=started
+      with_items:
+        - postgresql-{{ db_version }}
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+  tags:
+    - postgresql-all-333
+    - postgresql-start-db
+
+- name: Start database service AMI3
+  block:
+    - name: Change Path
+      lineinfile:
+        path: /usr/lib/systemd/system/postgresql.service
+        regexp: '^Environment=PGDATA='
+        line: 'Environment=PGDATA=/postgresqldata/pgsql/{{ db_ver }}/data/'
+      #shell: sudo sed 's|Environment=PGDATA=/var/lib/pgsql/data|Environment=PGDATA=/postgresqldata/pgsql/{{ db_ver }}/data/|' /usr/lib/systemd/system/postgresql.service
+    - name: Reload systemctl
+      shell: systemctl daemon-reload
+    - name: Start database service on AMI3
+      service: name={{ item }} state=started
+      with_items:
+        - postgresql
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+  tags:
+    - postgresql-all-333
+    - postgresql-start-db
+
+- name: Create scripts folder
+  file:
+    path: "{{ db_dir }}/scripts"
+    state: directory
+    mode: 0755
+    owner: postgres
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+
+- name: Add maintenance.sh
+  template:
+    src: "templates/maintenance.sh.j2"
+    dest: "{{ db_dir }}/scripts/maintenance.sh"
+    mode: 0700
+    owner: postgres
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-file
+
+- name: Add cron for cleaning DB
+  cron:
+    name: "clean history and archives"
+    user: postgres
+    minute: "{{ tasks_archive_cron_minute }}"
+    hour: "{{ tasks_archive_cron_hour }}"
+    weekday: "{{ tasks_archive_cron_weekday }}"
+    job: "cd {{ db_dir }}/scripts; bash maintenance.sh truncate_all"
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-cron
+
+- name: Add cron for cleaning tasks_history
+  cron:
+    name: "Clean history"
+    user: postgres
+    minute: 0
+    hour: 21
+    job: "cd {{ db_dir }}/scripts; bash maintenance.sh truncate_tasks_history"
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-cron

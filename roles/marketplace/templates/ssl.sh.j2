@@ -1,0 +1,72 @@
+#!/bin/bash
+# SSL Install Menu Script
+  #TODO - конвертировать в ansible
+PS3='Please enter your choice: '
+options=( "Install Let's Encrypt" "Add cron job to generate Let's Encrypt SSL certificates" "Add (generate) Let's Encrypt SSL certificates" "Add my personal certificate" "Restore to default certificate" "Restart nginx" "Quit" )
+select opt in "${options[@]}"
+do
+    case $opt in
+        "Install Let's Encrypt")
+            echo "you chose choice 1"
+            sudo yum install -y python2-certbot-nginx certbot
+            #sudo yum -y install snapd
+            #sudo systemctl enable --now snapd.socket
+            #sudo ln -s /var/lib/snapd/snap /snap
+            #sudo snap install core; sudo snap refresh core
+            #sudo snap install --classic certbot
+            #sudo ln -s /snap/bin/certbot /usr/bin/certbot
+            echo "Certbot install complete"
+            ;;
+
+        "Add cron job to generate Let's Encrypt SSL certificates")
+            echo "you chose choice 2"
+            #TODO Перед добавлением проверить существование чтоб не дублировать
+            crontab -l | { cat; echo "45 2 * * 6 root /usr/bin/certbot renew && sleep 30 && nginx -s reload >> /var/log/ssl_renew.log"; } | crontab -
+            echo "Job Added"
+            ;;
+
+        "Add (generate) Let's Encrypt SSL certificates")
+            sudo certbot --nginx --register-unsafely-without-email
+            ls -lah /etc/letsencrypt/live/
+            ;;
+
+        "Add my personal certificate")
+            mkdir /etc/nginx/ssl_backup >/dev/null 2>&1
+            cat /etc/nginx/ssl/corezoid.crt > /etc/nginx/ssl_backup/corezoid.crt
+            cat /etc/nginx/ssl/corezoid.key > /etc/nginx/ssl_backup/corezoid.key
+            echo "We open an editor to save your .crt (Pess F2 to save, then F10 to exit):"
+            sleep 6
+            sudo mcedit /etc/nginx/ssl/corezoid.crt
+            echo "Saved, please wait..."
+            sleep 3
+
+            echo "We open an editor to save your .key (Pess F2 to save, then F10 to exit):"
+            sleep 6
+            sudo mcedit /etc/nginx/ssl/corezoid.key
+            echo "Saved, please wait..."
+            sleep 3
+
+            nginx -t
+            nginx -s reload
+            echo "Press 7 to exit"
+            ;;
+
+        "Restore to default certificate")
+            yes | cp -ar /etc/nginx/ssl_backup/corezoid.crt /etc/nginx/ssl/corezoid.crt
+            yes | cp -ar /etc/nginx/ssl_backup/corezoid.key /etc/nginx/ssl/corezoid.key
+            nginx -t
+            nginx -s reload
+            echo ".crt and .key restored!"
+            ;;
+
+        "Restart nginx")
+            nginx -t
+            sudo systemctl restart nginx
+            ;;
+
+        "Quit")
+            break
+            ;;
+        *) echo "invalid option $REPLY";;
+    esac
+done

@@ -1,0 +1,5 @@
+---
+# vars file for elasticsearch
+elasticsearch_port: 8100
+elasticsearch_nginx_port: 9200
+elasticsearch_cluster_name: "worker-logs"

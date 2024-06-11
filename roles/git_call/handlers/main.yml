@@ -1,0 +1,11 @@
+---
+# handlers file for capi
+# - name: restart capi
+#   service: name=capi state=restarted enabled=yes
+
+# - name: stop capi
+#   service: name=capi state=stopped enabled=yes
+
+# - name: start capi
+#   service: name=capi state=started enabled=yes
+

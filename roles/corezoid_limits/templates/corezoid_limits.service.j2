@@ -1,0 +1,28 @@
+[Unit]
+Description=Corezoid Limits Application
+After=network.target crond.service
+
+[Service]
+Type=forking
+PermissionsStartOnly=true
+
+User=app-user
+Group=app-user
+
+ExecStartPre=/bin/mkdir -p /var/run/corezoid_limits
+ExecStartPre=/bin/chown app-user:app-user /var/run/corezoid_limits
+
+Environment=CONFIG_PATH=/ebsmnt/conf/corezoid_limits.config
+Environment=HOME=/ebsmnt/erlang/corezoid_limits
+
+ExecStart=/ebsmnt/erlang/corezoid_limits/bin/corezoid_limits start
+ExecStartPost=/bin/sh -c 'echo $MAINPID > /var/run/corezoid_limits/corezoid_limits.pid'
+
+ExecStop=/ebsmnt/erlang/corezoid_limits/bin/corezoid_limits stop
+
+ExecStopPost=/bin/sh -c 'rm -fr /var/run/corezoid_limits/corezoid_limits.pid'
+
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

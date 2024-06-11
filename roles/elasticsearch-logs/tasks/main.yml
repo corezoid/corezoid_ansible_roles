@@ -1,0 +1,232 @@
+---
+# tasks file for elasticsearch
+- name: Add PgSQL96 repo for RHEL/CentOS 7/8
+  yum:
+    name: https://download.postgresql.org/pub/repos/yum/reporpms/EL-7-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+    state: installed
+
+
+- name: Install packages
+  yum: name={{ item }} state=present
+  with_items:
+    - "elasticsearch"
+    - "nginx"
+#    - "kibana"
+    - "java-1.8.0-openjdk"
+    - "java-1.8.0-openjdk-headless"
+    - "postgresql{{ db_ver }}"
+    - "logstash"
+  notify:
+    - restart elasticsearch
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-install
+
+
+- name: Create elasticsearch config
+  template: src=templates/{{ item }}.yml.j2 dest=/etc/{{ item }}/{{ item }}.yml owner={{ elasticsearch_logs.es_dir_owner }} group={{ elasticsearch_logs.es_dir_owner }} mode=0750
+  with_items:
+    - elasticsearch
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-config
+
+- name: Creates main directory for elasticsearch
+  file:
+    path: "{{ top_dir }}/{{ elasticsearch_logs.es_main_dir }}"
+    state: directory
+    owner: "{{ elasticsearch_logs.es_dir_owner }}"
+    group: "{{ elasticsearch_logs.es_dir_owner }}"
+    mode: 0775
+    recurse: yes
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-dirs
+
+- name: Creates directories for elasticsearch
+  file: path={{ top_dir }}/{{ elasticsearch_logs.es_main_dir }}/{{ item }} state=directory owner={{ elasticsearch_logs.es_dir_owner }} group={{ elasticsearch_logs.es_dir_owner }} mode=0775 recurse=yes
+  with_items:
+    - work
+    - data
+    - plugins
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-dirs
+
+- name: Create crontab files for elasticsearch
+  template: src={{ item.src }} dest={{ item.dest }} owner=root group=root mode=0755
+  with_items:
+    - { src: 'templates/es_create_binlog_index.sh.j2', dest: '/root/es_create_binlog_index.sh' }
+    - { src: 'templates/es_capi_create_index.sh.j2', dest: '/root/es_capi_create_index.sh' }
+    - { src: 'templates/billing.sh.j2', dest: '/root/billing.sh' }
+  when: ansible_hostname == "elasticsearch_logs.es_mastername"
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-cron
+
+- name: Create pgpass files for billing
+  template: src={{ item.src }} dest={{ item.dest }} owner=root group=root mode=0600
+  with_items:
+    - { src: 'templates/pgpass.j2', dest: '/root/.pgpass' }
+  when: ansible_hostname == "elasticsearch_logs.es_mastername"
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-cron
+
+- name: Create crontab for elasticsearch
+  cron: minute="1"
+        name="{{ item.name }}"
+        user="root"
+        job="{{ item.job }}"
+  with_items:
+    - { name: "es_create_binlog_index", job: "/bin/bash /root/es_create_binlog_index.sh"}
+    - { name: "es_capi_create_index", job: "/bin/bash /root/es_capi_create_index.sh"}
+  when: ansible_hostname == "elasticsearch_logs.es_mastername"
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-cron
+
+- name: Create crontab files for elasticsearch
+  template: src={{ item.src }} dest={{ item.dest }} owner=root group=root mode=0755
+  with_items:
+    - { src: 'templates/es_del_logs.sh.j2', dest: '/root/es_del_logs.sh' }
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-cron
+
+- name: Create crontab for elasticsearch
+  cron: hour="2"
+        minute="00"
+        name="{{ item.name }}"
+        user="root"
+        job="{{ item.job }}"
+  with_items:
+    - { name: "es_del_logs", job: "/bin/bash /root/es_del_logs.sh"}
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-cron
+
+- name: Create crontab for billing
+  cron: name="{{ item.name }}"
+        user="root"
+        job="{{ item.job }}"
+  with_items:
+    - { name: "Billing", job: "/bin/bash /root/billing.sh"}
+  when: ansible_hostname == "elasticsearch_logs.es_mastername"
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-cron
+
+- name: Elasticsearch nginx conf for kibana
+  template: src=templates/{{ item }}.conf.j2 dest=/etc/nginx/conf.d/{{ item }}.conf mode=0750
+  with_items:
+    - kibana
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-kibana
+
+- name: Elasticsearch nginx conf for elasticsearch
+  template: src=templates/{{ item }}.conf.j2 dest=/etc/nginx/conf.d/{{ item }}.conf mode=0750
+  with_items:
+    - es
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-kibana
+
+- name: Create nginx ssl dir
+  file: path=/etc/nginx/ssl owner=root group=root state=directory mode=0755
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-nginx-setup
+
+- name: Delete nginx default configs
+  file: path=/etc/nginx/conf.d/{{ item }} state=absent
+  with_items:
+    - "default.conf"
+    - "virtual.conf"
+    - "ssl.conf"
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-nginx-setup
+
+- name: Copy SSL certificate data
+  copy:
+    content: "{{ nginx_ssl_content }}"
+    dest: "{{ nginx_ssl_filename }}"
+    owner: "root"
+    group: "root"
+    mode: "0600"
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-nginx-setup
+
+- name: Create nginx ssl cert file
+  template: src=templates/{{ item }}.j2 dest={{ nginx_ssl_dir }}/{{ item }} owner=root group=root mode=0600
+  with_items:
+    - "cert-corezoid"
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-nginx-setup
+
+- name: Create nginx ssl links
+  file: src={{ nginx_ssl_filename }} dest={{ nginx_ssl_dir }}/{{ item }} state=link
+  with_items:
+    - "corezoid.crt"
+    - "corezoid.key"
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-nginx-setup
+
+- name: Nginx conf
+  template: src=templates/nginx.conf.j2 dest=/etc/nginx/nginx.conf owner=root group=root mode=0600
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-nginx-setup
+
+- name: Logstash Create config file
+  template: src=templates/{{ item }}.conf.j2 dest=/etc/logstash/conf.d/{{ item }}.conf owner=root group=root mode=0666
+  with_items:
+    - logstash_billing
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-logstash
+
+- name: Logstash Create init file
+  template: src=templates/logstash.init.j2 dest=/etc/init.d/{{ item }} owner=root group=root mode=0555
+  with_items:
+    - logstash_billing
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-logstash
+
+- name: Enable to survive reboot
+  service: name={{ item }} enabled=yes state=started
+  with_items:
+    - elasticsearch
+    - nginx
+    - kibana
+    - monit
+  notify:
+    - restart elasticsearch
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-install
+
+- name: Create monit file
+  template: src=templates/{{ item }}.monit.j2 dest=/etc/monit.d/{{ item }} owner=root group=root mode=0600
+  with_items:
+    - logstash_billing
+  register: monit_file
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-logstash-monit
+
+- name: Reload monit if config file changed
+  service:
+    name: monit
+    state: reloaded
+  when: monit_file.changed
+  tags:
+    - elasticsearch_logs-all
+    - elasticsearch_logs-logstash-monit
+

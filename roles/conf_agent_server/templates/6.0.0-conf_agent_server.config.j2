@@ -1,0 +1,175 @@
+[
+    {corezoid_sdk,                                 % deps for working with corezoid api
+    [
+        {host, "{{ capi_admin_url1 }}"}               % corezoid api host
+    ]},
+
+{% if licence_db_enabled == "true" %}
+    {corezoid_license_client, [
+       {driver, "db"},
+         {pgsql, [
+         {host, "{{ db_main.host }}"},
+         {user, "{{ db_main.user }}"},
+         {dbname, "settings"},
+         {password, "{{ db_main.pass }}"}
+         ]}
+    ]},
+{% else %}
+    {corezoid_license_client, [
+      {driver, "fs"},
+        {path_to_license, "{{ top_dir }}/certs/{{ license_file_name }}"}
+  ]},
+{% endif %}
+
+{% if enigma_is_enabled == "true" %}
+    {enigma, [
+        {is_enabled, {{ enigma_is_enabled }}},
+        {private_key_id, "{{ enigma_private_key_id }}"},
+        {key_manager_host, "{{ enigma_key_manager_host }}"},
+
+        {client_cert, "{{ enigma_client_cert }}"},
+        {client_key, "{{ enigma_client_key }}"},
+        {ca_cert, "{{ enigma_ca_cert }}"},
+
+        {rotors_pool, [
+            {min_size, 5},
+            {max_size, 5},
+            {start_size, 5}
+        ]}
+    ]},
+{% else %}
+    {enigma, [
+        {is_enabled, {{ enigma_is_enabled }}}
+    ]},
+{% endif %}
+
+    {dns_cache, [
+        {servers, [
+{% for item in rmq_core %}
+            [
+                {name, {{ item.dns_cache_name }}},
+                {dns, "{{ item.host }}"},
+                {ttl, {{ dns_cache_ttl | default(60) }}}
+            ],
+{% endfor %}
+            [
+                {name, {{ rmq_http[0].dns_cache_name }}},
+                {dns, "{{ rmq_http[0].host }}"},
+                {ttl, {{ dns_cache_ttl | default(60) }}}
+            ]
+        ]}
+    ]},
+
+    {ermql, [
+        {publish_request, [
+            {servers, [
+                [
+                    %%{dns_name, {{ rmq_http[0].dns_cache_name }}},
+                    {host, "{{ rmq_http[0].host }}"},
+                    {port, {{ rmq_http[0].port }}},
+                    {username, <<"{{ rmq_http[0].user }}">>},
+                    {password, <<"{{ rmq_http[0].pass }}">>},
+                    {vhost, <<"{{ rmq_vhost }}">>}
+                ]
+            ]},
+            {queues_count, 1},
+            {min_size, 1},
+            {max_size, 1},
+            {start_size, 1}
+        ]},
+
+        {consumer_response, [
+            {servers, [
+                [
+                    %%{dns_name, {{ rmq_http[0].dns_cache_name }}},
+                    {host, "{{ rmq_http[0].host }}"},
+                    {port, {{ rmq_http[0].port }}},
+                    {username, <<"{{ rmq_http[0].user }}">>},
+                    {password, <<"{{ rmq_http[0].pass }}">>},
+                    {vhost, <<"{{ rmq_vhost }}">>}
+                ]
+            ]},
+            {connections_per_queue, 1},
+            {channels_per_connection, 1},
+            {messages_prefetch_size_per_channel, 50}
+        ]}
+    ]},
+
+    %% for clustering components
+    {corezoid_cluster, [
+        {backend, redis}, %% maybe if future list will increase
+        {redis, [
+            {host, "{{ redis_cache[0].host }}"},
+            {port, {{ redis_cache[0].port }}},
+            {database, 10},
+            {password, "{{ redis_cache_password | default("") }}"}
+        ]}
+    ]},
+
+    {corezoid_queues_gc, [
+        {disabled, true},
+        {host, "{{ rmq_http[0].host }}"},
+        {port, 15672},
+        {vhost, "{{ rmq_http[0].vhost }}"},
+        {login, "conveyor_gc"},
+        {password, "{{ rmq_http[0].pass }}"},
+        {gc_queues_regexp, ["conf_agent_client_queue_conf_agent_server", "conf_agent_server_directconf_agent_server", "conf_agent_serverconf_agent_server",
+                             "ermql_license_distributor_request_conf_agent_server", "mw_component_version_client_queue_conf_agent_server"]}
+    ]},
+
+
+    {conf_agent_server,
+    [
+        {port, {{ conf_agent_server_port }}},                            % port for listen api requests (8585 by default)
+        {encrypt_decrypt, []},                       % for enable encrypt rabbit msgs need set to {encrypt_decrypt, [queue]}
+
+        {pgsql,                                      % DB settings
+        [
+            {host, "{{ db_main.host }}"},
+            {user, "{{ db_main.user }}"},
+            {dbname, "settings"},
+            {password, "{{ db_main.pass }}"},
+            {min_size, 1},                             % min pool workers size
+            {max_size, 2},                             % max pool workers size
+            {start_size, 1}                            % start pool workers size
+        ]},
+
+        % CAUTION: development only value
+        % By setting this param to true means that the previous versions for components would be removed
+        % So, only the last component's version would be available within admin panel.
+        {is_clean_old_components_versions, true},
+
+        {publish_request, [                           % rabbit publisher settings
+            {servers, [
+                [
+                    %%{dns_name, {{ rmq_http[0].dns_cache_name }}},
+                    {host, "{{ rmq_http[0].host }}"},
+                    {port, {{ rmq_http[0].port }}},
+                    {username, <<"{{ rmq_http[0].user }}">>},
+                    {password, <<"{{ rmq_http[0].pass }}">>},
+                    {vhost, <<"{{ rmq_vhost }}">>}
+                ]
+            ]},
+            {queues_count, 1},
+            {min_size, 1},
+            {max_size, 2},
+            {start_size, 1}
+        ]},
+
+        {consumer_response, [                          % rabbit consumer settings
+            {servers, [
+                [
+                    %%{dns_name, {{ rmq_http[0].dns_cache_name }}},
+                    {host, "{{ rmq_http[0].host }}"},
+                    {port, {{ rmq_http[0].port }}},
+                    {username, <<"{{ rmq_http[0].user }}">>},
+                    {password, <<"{{ rmq_http[0].pass }}">>},
+                    {vhost, <<"{{ rmq_vhost }}">>}
+                ]
+            ]},
+            {connections_per_queue, 1},
+            {channels_per_connection, 1},
+            {messages_prefetch_size_per_channel, 50}
+        ]}
+    ]}
+].

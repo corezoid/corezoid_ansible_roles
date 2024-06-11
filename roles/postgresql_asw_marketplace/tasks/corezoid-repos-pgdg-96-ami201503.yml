@@ -1,0 +1,24 @@
+# tasks file for capi
+# - name: add corezoid-box repo
+#   template: src=files/pgdg-96-ami201503.repo dest=/etc/yum.repos.d/pgdg-96-ami201503.repo
+#   # with_items: {{ repo_list }}
+#   #   # - "corezoid-box"
+#   #   # - "conveyor"
+
+- name: Setup gpg key for pgdg-13-ami201503
+  template: src=files/RPM-GPG-KEY-PGDG-13 dest=/etc/pki/rpm-gpg/RPM-GPG-KEY-PGDG-13
+
+# - name: Import gpg key for pgdg-96-ami201503
+#   rpm_key:
+#     state: present
+#     key: /etc/pki/rpm-gpg/RPM-GPG-KEY-PGDG-96
+
+- name: Add repo pgdg-13-ami201503
+  yum_repository:
+    name: pgdg-13-ami201503
+    description: PostgreSQL 13 - Amazon Linux AMI 2015.03
+    baseurl: https://download.postgresql.org/pub/repos/yum/13/redhat/rhel-6.9-$basearch
+    enabled: yes
+    gpgkey: file:///etc/pki/rpm-gpg/RPM-GPG-KEY-PGDG-13
+    gpgcheck: yes
+    priority: "5"

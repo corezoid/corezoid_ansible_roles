@@ -1,0 +1,11 @@
+---
+# handlers file for worker
+
+- name: Reload monit if config file changed
+  service:
+    name: monit
+    state: reloaded
+  when: monit_file.changed
+  tags:
+    - http-worker-all
+    - http-worker-monit

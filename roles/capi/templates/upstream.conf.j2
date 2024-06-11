@@ -1,0 +1,39 @@
+map $http_upgrade $connection_upgrade {
+	default upgrade;
+	''      close;
+}
+
+upstream mw-api-backend {
+{% if capi_hosts[0].host == "" or capi_hosts is not defined %}
+	server  127.0.0.1:{{ capi_port }};
+{% else %}
+{% for item in capi_hosts %}
+	server {{ item.host }}:{{ capi_port }};
+{% endfor %}
+{% endif%}
+}
+
+upstream mw-mult-backend {
+{% if mult_hosts[0].host == "" %}
+	server 127.0.0.1:{{ api_mult_port }};
+{% else %}
+{% for item in mult_hosts %}
+	server {{ item.host }}:{{ api_mult_port }};
+{% endfor %}
+{% endif%}
+}
+
+upstream conf-agent-client-backend {
+{% if capi_hosts[0].host == "" or capi_hosts is not defined %}
+	server  127.0.0.1:{{ conf_agent_server_port }};
+{% else %}
+{% for item in capi_hosts %}
+	server {{ item.host }}:{{ conf_agent_server_port }};
+{% endfor %}
+{% endif%}
+}
+{% if hc_server_disabled == "false" %}
+upstream hcs-api-backend {
+	server 127.0.0.1:{{ hcs_port }};
+}
+{% endif %}

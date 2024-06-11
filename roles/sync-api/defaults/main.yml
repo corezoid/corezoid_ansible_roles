@@ -1,0 +1,7 @@
+---
+# defaults file for capi
+corezoid_api_sync_kernel_inet_dist_listen_min: 5666
+corezoid_api_sync_kernel_inet_dist_listen_max: 5666
+
+corezoid_api_sync_is_ready_port: 8384
+corezoid_api_sync_is_ready_disabled: "true"

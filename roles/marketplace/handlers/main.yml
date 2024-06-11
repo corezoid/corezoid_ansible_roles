@@ -1,0 +1,7 @@
+---
+# handlers file for marketplace
+- name: restart capi
+  service: name=capi state=restarted enabled=yes
+
+- name: restart rc.local
+  service: name=rc-local state=restarted enabled=yes

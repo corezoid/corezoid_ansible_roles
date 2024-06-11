@@ -1,0 +1,497 @@
+---
+- name: Add rabbit repo
+  template:
+    src: templates/rabbit.repo
+    dest: /etc/yum.repos.d/rabbit.repo
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "9"
+
+- name: Add rabbit repo oracl linux
+  template:
+    src: templates/rabbit1.repo
+    dest: /etc/yum.repos.d/rabbit.repo
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "8"
+
+- name: Yum clean all
+  command: yum clean all
+#  args:
+#    warn: false
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+
+- name: Install Socat for RabbitMQ Centos 7
+  yum:
+    name: "{{ item }}"
+    # lock_timeout: 180
+    state: present
+    update_cache: yes
+    enablerepo: "Middleware-system"
+    disablerepo: "*"
+  with_items:
+    - socat
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "7"
+
+- name: Install Socat for RabbitMQ for Centos 9
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+    # enablerepo: "rabbit"
+    # disablerepo: "*"
+  with_items:
+    - socat
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "9" or ansible_distribution_major_version == "8"
+
+- name: Install Socat for RabbitMQ for Amazon
+  yum:
+    name: "{{ item }}"
+    # lock_timeout: 180
+    state: present
+    update_cache: yes
+    enablerepo: "Middleware-system"
+    disablerepo: "*"
+  with_items:
+    - socat
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when:
+    - ansible_distribution == "Amazon"
+    - ansible_distribution_major_version == "2"
+
+- name: Install Socat for RabbitMQ for AMI3
+  yum:
+    name: "{{ item }}"
+    # lock_timeout: 180
+    state: present
+    update_cache: yes
+  with_items:
+    - socat
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when:
+    - ansible_distribution == "Amazon"
+    - ansible_distribution_major_version == "2023"
+
+- name: Install Erlang for RabbitMQ Centos 7
+  yum:
+    name: "{{ item }}"
+    # lock_timeout: 180
+    state: present
+    update_cache: yes
+    enablerepo: "Middleware-system"
+    disablerepo: "*"
+  with_items:
+    - "{{ app_erl_version }}"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "7"
+
+- name: Install Erlang for RabbitMQ Oracl linux 8
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  #    enablerepo: "rabbit"
+  #    disablerepo: "*"
+  with_items:
+    - "{{ app_erl_version }}"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "8"
+
+- name: Install Erlang for RabbitMQ Centos 9
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+    enablerepo: "rabbit"
+    disablerepo: "*"
+  with_items:
+    - "{{ app_erl_version }}"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "9"
+
+- name: Install Erlang for RabbitMQ Amazon
+  yum:
+    name: "{{ item }}"
+    # lock_timeout: 180
+    state: present
+    update_cache: yes
+    enablerepo: "Middleware-system"
+    disablerepo: "*"
+  with_items:
+    - "{{ app_erl_version }}"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when:
+    - ansible_distribution == "Amazon"
+    - ansible_distribution_major_version == "2"
+
+- name: Install Erlang for RabbitMQ AMI3
+  yum:
+    name: "{{ item }}"
+    # lock_timeout: 180
+    state: present
+    update_cache: yes
+  with_items:
+    - "{{ app_erl_version }}"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when:
+    - ansible_distribution == "Amazon"
+    - ansible_distribution_major_version == "2023"
+
+- name: Install RabbitMQ Centos 7
+  yum:
+    name: "{{ item }}"
+    # lock_timeout: 180
+    state: present
+    update_cache: yes
+    #enablerepo: "rabbitmq_rabbitmq-server"
+    #disablerepo: "*"
+  with_items:
+    - rabbitmq-server-{{ rmq_version }}
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "7"
+
+- name: Install RabbitMQ Centos 8
+  yum:
+    name: "{{ item }}"
+    # lock_timeout: 180
+    state: present
+    update_cache: yes
+    enablerepo: "rabbit"
+    disablerepo: "*"
+  with_items:
+    - rabbitmq-server-{{ rmq_version }}
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "8"
+
+- name: Install RabbitMQ Centos 9
+  yum:
+    name: "{{ item }}"
+    # lock_timeout: 180
+    state: present
+    update_cache: yes
+    enablerepo: "rabbit"
+    disablerepo: "*"
+  with_items:
+    - rabbitmq-server-{{ rmq_version }}
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "9"
+
+- name: Install RabbitMQ Amazon
+  yum:
+    name: "{{ item }}"
+    # lock_timeout: 180
+    state: present
+    update_cache: yes
+    #enablerepo: "rabbitmq_rabbitmq-server"
+    #disablerepo: "*"
+  with_items:
+    - rabbitmq-server-{{ rmq_version }}
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+  when: ansible_distribution == "Amazon"
+
+- name: copy erlang cookie
+  template:
+    src: erlang.cookie.j2
+    dest: "{{ rabbitmq_erlang_cookie_file_path }}"
+    owner: rabbitmq
+    group: rabbitmq
+    mode: 0400
+    backup: yes
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+    - rabbitmq-install-cookie
+
+- name: copy the rabbitmq configuration file
+  template:
+    src: rabbitmq.config.j2
+    dest: "{{ rabbitmq_config_file_path }}"
+    owner: "{{ rabbitmq_config_file_owner }}"
+    group: "{{ rabbitmq_config_file_group }}"
+    mode: "{{ rabbitmq_config_file_mode }}"
+    backup: yes
+  when: not autoscale
+  tags:
+    - rabbitmq-all
+    - rabbitmq-set-pass
+
+- name: copy the rabbitmq configuration file
+  template:
+    src: rabbitmq_autoscale.config.j2
+    dest: "{{ rabbitmq_config_file_path }}"
+    owner: "{{ rabbitmq_config_file_owner }}"
+    group: "{{ rabbitmq_config_file_group }}"
+    mode: "{{ rabbitmq_config_file_mode }}"
+    backup: yes
+  when: autoscale
+  tags:
+    - rabbitmq-all
+    - rabbitmq-set-pass
+
+- name: alter number of system's open file if rabbitmq_system_number_open_files is set
+  block:
+    # - name: check if value is under 500k
+    #   fail:
+    #     msg: "The number of open files in the system should not exceed 500K."
+    #   when: rabbitmq_system_number_open_files > 500000
+
+    - name: make sure service.d exists
+      file:
+        path: "{{ rabbitmq_service_d_path }}"
+        state: directory
+
+    - name: change limit of system's number of open file
+      template:
+        src: limits.conf.j2
+        dest: "{{ rabbitmq_service_d_path }}/limits.conf"
+        backup: true
+  when: rabbitmq_system_number_open_files is defined and ansible_os_family == "RedHat" and ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-set-pass
+
+- name: set default admin password for Amazon Linux
+  set_fact: rmq_admin_pass={{ ansible_ec2_instance_id }}
+  when: rmq_admin_pass is not defined and ansible_distribution == "Amazon"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-set-pass
+
+- name: current rmq_admin_pass
+  debug: msg={{ rmq_admin_pass }}
+  tags:
+    - rabbitmq-all
+    - rabbitmq-set-pass-debug
+
+- name: setup RabbitMQ plugins list
+  template: src=templates/enabled_plugins.j2 dest=/etc/rabbitmq/enabled_plugins owner=root group=root mode=0644
+  tags:
+    - rabbitmq-all
+    - rabbitmq-enable-plugins
+
+- name: enable rabbitmq-server to survive reboot
+  service: name=rabbitmq-server state=started enabled=yes
+  tags:
+    - rabbitmq-all
+    - rabbitmq-enable-autostart
+
+# - name: get admin pass
+#   command: curl -s http://169.254.169.254/latest/meta-data/instance-id
+#   register: rmq_admin_pass
+
+- name: ensure vhost is present
+  rabbitmq_vhost:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - "{{ rmq_vhost }}"
+    - "{{ rmq_vhost_gitcall }}"
+    - "{{ rmq_vhost_dbcall }}"
+    - "{{ rmq_vhost_dundergitcall }}"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-add-vhost
+
+- name: add admin users
+  rabbitmq_user:
+    user: "{{ item.login }}"
+    password: "{{ item.pass }}"
+    tags: "administrator,management"
+    vhost: "{{ item.vhost }}"
+    configure_priv: .*
+    write_priv: .*
+    read_priv: .*
+    state: present
+  with_items:
+    - { "login": "admin", "pass": "{{ rmq_admin_pass }}", "vhost": "{{ rmq_vhost }}" }
+    - { "login": "admin", "pass": "{{ rmq_admin_pass }}", "vhost": "{{ rmq_vhost_gitcall }}" }
+    - { "login": "admin", "pass": "{{ rmq_admin_pass }}", "vhost": "{{ rmq_vhost_dbcall }}" }
+    - { "login": "admin", "pass": "{{ rmq_admin_pass }}", "vhost": "{{ rmq_vhost_dundergitcall }}" }
+  no_log: true
+  tags:
+    - rabbitmq-all
+    - rabbitmq-add-users
+    - rabbitmq-add-admin
+
+- name: add conveyor_gc user
+  rabbitmq_user:
+    user: "{{ item.login }}"
+    password: "{{ item.pass }}"
+    tags: "administrator,management"
+    vhost: "{{ item.vhost }}"
+    configure_priv: .*
+    write_priv: .*
+    read_priv: .*
+    state: present
+  with_items:
+    - { "login": "conveyor_gc", "pass": "{{ rmq_http[0].pass }}", "vhost": "{{ rmq_vhost }}" }
+  no_log: true
+  tags:
+    - rabbitmq-all
+    - rabbitmq-add-users
+    - rabbitmq-add-conveyor_gc
+
+- name: add app users
+  rabbitmq_user:
+    user: "{{ item.login }}"
+    password: "{{ item.pass }}"
+    vhost: "{{ item.vhost }}"
+    configure_priv: .*
+    write_priv: .*
+    read_priv: .*
+    state: present
+  with_items:
+    - { "login": "{{ rmq_user }}", "pass": "{{ rmq_user_pass }}", "vhost": "{{ rmq_vhost }}" }
+    - { "login": "{{ rmq_user }}", "pass": "{{ rmq_user_pass }}", "vhost": "{{ rmq_vhost_gitcall }}" }
+    - { "login": "{{ rmq_user }}", "pass": "{{ rmq_user_pass }}", "vhost": "{{ rmq_vhost_dbcall }}" }
+    - { "login": "{{ rmq_user }}", "pass": "{{ rmq_user_pass }}", "vhost": "{{ rmq_vhost_dundergitcall }}" }
+  no_log: true
+  tags:
+    - rabbitmq-all
+    - rabbitmq-add-users
+
+# - name: add gitcall-v2 users
+#   rabbitmq_user: user={{item.login}} password={{item.pass}} vhost={{rmq_vhost}} configure_priv=.* write_priv=.* read_priv=.* state=present
+#   with_items:
+#     - { "login": "{{ rmq_user }}", "pass": "{{ rmq_user_pass }}" }
+#   no_log: true
+#   tags:
+#     - rabbitmq-all
+#     - rabbitmq-add-users
+
+# - name: add gitcall-v2 users
+#   rabbitmq_user: user={{ item.login }} password={{ item.pass }} vhost={{ rmq_vhost_gitcall }} configure_priv=.* write_priv=.* read_priv=.* state=present
+#   with_items:
+#     - { "login": "{{ rmq_user }}", "pass": "{{ rmq_user_pass }}" }
+#   no_log: true
+#   tags:
+#     - rabbitmq-all
+#     - rabbitmq-add-users
+
+# - name: add gitcall-v2 users
+#   rabbitmq_user: user={{ item.login }} password={{ item.pass }} vhost={{ rmq_vhost_dbcall }} configure_priv=.* write_priv=.* read_priv=.* state=present
+#   with_items:
+#     - { "login": "{{ rmq_user }}", "pass": "{{ rmq_user_pass }}" }
+#   no_log: true
+#   tags:
+#     - rabbitmq-all
+#     - rabbitmq-add-users
+
+# - name: add gitcall-v2 users
+#   rabbitmq_user: user={{ item.login }} password={{ item.pass }} vhost={{ rmq_vhost_dundergitcall }} configure_priv=.* write_priv=.* read_priv=.* state=present
+#   with_items:
+#     - { "login": "{{ rmq_user }}", "pass": "{{ rmq_user_pass }}" }
+#   no_log: true
+#   tags:
+#     - rabbitmq-all
+#     - rabbitmq-add-users
+
+- name: ensure the trash users are removed
+  rabbitmq_user:
+    user={{ item }}
+    state=absent
+  with_items: "{{ rabbitmq_users_remove }}"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-set-pass
+
+- name: ensure rabbitmq_management is enabled
+  rabbitmq_plugin:
+    names: rabbitmq_management
+    state: enabled
+  when: not autoscale
+  tags:
+    - rabbitmq-all
+    - rabbitmq-plugins
+
+- name: ensure rabbitmq_peer_discovery_aws is enabled
+  rabbitmq_plugin:
+    names: rabbitmq_peer_discovery_aws
+    state: enabled
+  when: autoscale
+  tags:
+    - rabbitmq-all
+    - rabbitmq-plugins
+
+- name: Ensure the conveyor vhost contains the HA policy
+  rabbitmq_policy:
+    name: ha-all
+    pattern: .*
+    vhost: "{{ item }}"
+    priority: "0"
+  args:
+    tags:
+      ha-mode: all
+  with_items:
+    - "{{ rmq_vhost }}"
+  tags:
+  - rabbitmq-all
+  - rabbitmq-policy
+
+- name: Ensure the gitcall vhost contains the HA policy
+  rabbitmq_policy:
+    name: "ha-all-{{ item }}"
+    pattern: .*
+    vhost: "/{{ item }}"
+    priority: "0"
+  args:
+    tags:
+      ha-mode: all
+  with_items:
+    - "gitcall"
+    - "dundergitcall"
+  tags:
+  - rabbitmq-all
+  - rabbitmq-policy

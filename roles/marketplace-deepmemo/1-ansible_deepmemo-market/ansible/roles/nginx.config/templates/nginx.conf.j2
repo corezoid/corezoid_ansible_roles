@@ -1,0 +1,59 @@
+# For more information on configuration, see:
+#   * Official English Documentation: http://nginx.org/en/docs/
+#   * Official Russian Documentation: http://nginx.org/ru/docs/
+
+user  nginx;
+worker_processes  auto;
+
+error_log  /var/log/nginx/error.log;
+#error_log  /var/log/nginx/error.log  notice;
+#error_log  /var/log/nginx/error.log  info;
+
+pid        /var/run/nginx.pid;
+
+
+events {
+    worker_connections  65535;
+}
+
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    log_format up_log '$server_addr\t$server_port\t$remote_addr\t$time_iso8601\tforward-to $upstream_addr\t$request\t$status\t$body_bytes_sent\t$request_time\t$upstream_response_time\t$http_referer\t$http_user_agent\t$http_cookie\t$host';
+    log_format ssl_up_log '$server_addr\t$server_port\t$remote_addr\t$time_iso8601\tforward-to $upstream_addr\t$request\t$status\t$body_bytes_sent\t$request_time\t$upstream_response_time\t$http_referer\t$http_user_agent\t$http_cookie\t$host\t$ssl_protocol\t$ssl_cipher';
+
+    access_log  /var/log/nginx/access.log up_log;
+
+    real_ip_header      X-Forwarded-For;
+    set_real_ip_from    0.0.0.0/0;
+
+    #resolver 10.58.1.10 10.58.2.10 ipv6=off valid=30s;
+
+    limit_req_zone $binary_remote_addr zone=one:20m rate=1r/s;
+    limit_req_zone $binary_remote_addr zone=five:20m rate=5r/s;
+    limit_req_zone $binary_remote_addr zone=ten:20m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=fifteen:20m rate=15r/s;
+    limit_req_zone $binary_remote_addr zone=fifty:20m rate=50r/s;
+    limit_req_zone $binary_remote_addr zone=hundred:20m rate=100r/s;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    server_tokens   off;
+
+    #keepalive_timeout  0;
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    # Load modular configuration files from the /etc/nginx/conf.d directory.
+    # See http://nginx.org/en/docs/ngx_core_module.html#include
+    # for more information.
+    include /etc/nginx/conf.d/*.conf;
+}

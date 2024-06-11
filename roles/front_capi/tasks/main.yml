@@ -1,0 +1,208 @@
+---
+- name: current ansible_all_ipv4_addresses
+  debug: msg={{ ansible_all_ipv4_addresses }}
+  tags:
+    - front-capi-all
+    - front-capi-app
+    - front-capi-debug
+
+- name: Yum clean all
+  command: yum clean all
+#  args:
+#    warn: false
+  tags:
+    - front-capi-app
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-package
+
+- name: Install nGinx package
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  with_items:
+    - nginx
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-package
+
+- name: Install corezoid-web-admin package
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+    disablerepo: "*"
+    enablerepo: "aws-corezoid"
+  with_items:
+    - corezoid-web-admin-{{ corezoid_release_app_version.corezoid_web_admin }}
+  tags:
+    - front-capi-app
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-package-corezoid-web
+
+- name: Install Superadmin static
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+    disablerepo: "*"
+    enablerepo: "aws-corezoid"
+  with_items:
+    - conf-agent-client
+  when: corezoid_release > '4.2'
+  tags:
+    - front-capi-app
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-superadmin
+
+
+- name: Create nGinx img dir
+  file: path={{ top_dir }}/img owner=nginx group=nginx state=directory mode=0755
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-setup-img
+
+- name: Create nGinx dir for favicon and logo
+  file: path={{ top_dir }}/img/{{ item }} owner=nginx group=nginx state=directory mode=0755
+  with_items:
+    - "favicon"
+    - "logo"
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-setup-img
+
+- name: Add default avatars
+  copy: src=files/img/{{ item }} dest={{ top_dir }}/img owner=nginx group=nginx mode=0644
+  # when: def_avatar_check.stat.isreg is not defined
+  with_items:
+    - "favicon"
+    - "logo"
+  tags:
+    - front-capi-app
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-setup-img
+
+- name: Delete nGinx default configs
+  file: path=/etc/nginx/conf.d/{{ item }} state=absent
+  with_items:
+    - "default.conf"
+    - "virtual.conf"
+    - "ssl.conf"
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-delete
+
+- name: Create nGinx main configs
+  template: src=templates/{{ corezoid_release }}-{{ item }}.j2 dest=/etc/nginx/conf.d/{{ item }} owner=root group=root mode=0644
+  with_items:
+    - "01-corezoid.com.conf"
+    - "superadmin.conf"
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-configs
+    - front-capi-nginx-configs-main
+
+#- name: Create nGinx configs for HCS
+#  template: src=templates/{{ corezoid_release }}-{{ item }}.j2 dest=/etc/nginx/conf.d/{{ item }} owner=root group=root mode=0644
+#  with_items:
+#    - "02-hcs.corezoid.com.conf"
+#  when: hc_server_disabled == "false"
+#  tags:
+#    - front-capi-all
+#    - front-capi-nginx-setup
+#    - front-capi-nginx-configs
+
+- name: Create symbolic for superadmin
+  file:
+    src: "/ebsmnt/www/conf-agent-client"
+    dest: "/ebsmnt/www/conf-agent-client/superadmin"
+    state: link
+  tags:
+    - front-capi-app
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-configs
+    - front-capi-nginx-symlink
+
+- name: Create nGinx default configs
+  template: src=templates/{{ item }}.j2 dest=/etc/nginx/conf.d/corezoid-{{ item }} owner=root group=root mode=0644
+  with_items:
+    - "upstream.conf"
+    - "status.conf"
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-configs
+
+- name: Create nGinx ssl dir
+  file: path={{ nginx_ssl_dir }} owner=root group=root state=directory mode=0755
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-setup-ssl
+
+- name: Copy SSL certificate data
+  copy:
+    content: "{{ nginx_ssl_content }}"
+    dest: "{{ nginx_ssl_filename }}"
+    owner: "root"
+    group: "root"
+    mode: "0600"
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-setup-ssl
+
+- name: Create nGinx ssl conf
+  template: src=templates/{{ item }}.j2 dest={{ nginx_ssl_dir }}/{{ item }} owner=root group=root mode=0600
+  with_items:
+    - "cert-corezoid"
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-setup-ssl
+
+- name: Create nGinx ssl links
+  file: src={{ nginx_ssl_filename }} dest={{ nginx_ssl_dir }}/{{ item }} state=link
+  with_items:
+    - "corezoid.crt"
+    - "corezoid.key"
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-setup-ssl
+
+- name: Create nGinx conf
+  template: src=templates/nginx.conf.j2 dest=/etc/nginx/nginx.conf owner=root group=root mode=0600
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-mainconfig
+
+- name: Enable nGinx to survive reboot
+  service:
+    name: nginx
+    state: started
+    enabled: yes
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-system
+
+- name: Restart nGinx
+  service:
+    name: nginx
+    state: restarted
+  tags:
+    - capi-all
+    - capi-nginx-setup
+    - capi-nginx-restart

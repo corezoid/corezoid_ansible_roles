@@ -1,0 +1,5 @@
+---
+# vars file for license-server
+
+ls_server_host: "127.0.0.1"
+ls_server_port: 5010

@@ -1,0 +1,266 @@
+- name: Add redis repo
+  template:
+    src: templates/redis.repo
+    dest: /etc/yum.repos.d/redis.repo
+    owner: root
+    group: root
+    mode: '0644'
+
+
+- name: Yum clean all
+  command: yum clean all
+#  args:
+#    warn: false
+  tags:
+    - redis-all
+    - redis-install
+
+- name: Install redis Centos 7
+  yum:
+    name: "redis-{{ redis_version }}"
+    state: present
+    update_cache: yes
+    enablerepo: "redis"
+    disablerepo: "*"
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "7"
+
+- name: Install redis Amazon
+  yum:
+    name: "redis-{{ redis_version }}"
+    state: present
+    update_cache: yes
+    enablerepo: "redis"
+    disablerepo: "*"
+  when:
+    - ansible_distribution == "Amazon"
+    - ansible_distribution_major_version == "2"
+
+##=======================Временное решение для Centos 9 до того как закинут пакет в репо =====================##
+- name: Copy redis Packages for Centos 9
+  copy:
+    src: "files/redis-7.0.12-1.el9.remi.x86_64.rpm"
+    dest: /tmp/redis-7.0.12-1.el9.remi.x86_64.rpm
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - redis_version == "7.0.12"
+    - ansible_distribution_major_version == "9"
+  tags:
+    - redis-all
+    - redis-install
+
+- name: Install redis Packages for  Centos 9
+  command: yum install /tmp/redis-7.0.12-1.el9.remi.x86_64.rpm -y
+  ignore_errors: true
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - redis_version == "7.0.12"
+    - ansible_distribution_major_version == "9"
+  tags:
+    - redis-all
+    - redis-install
+
+- name: Remove redis Packages for Centos 9
+  file:
+    path: "tmp/redis-7.0.12-1.el9.remi.x86_64.rpm"
+    state: absent
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - redis_version == "7.0.12"
+    - ansible_distribution_major_version == "9"
+  tags:
+    - redis-all
+    - redis-install
+
+##======================= END после удалить пакет из files =====================##
+
+##=======================Временное решение для Centos 8 / Oracl Linux 8 до того как закинут пакет в репо =====================##
+- name: Copy redis Packages for Centos 8
+  copy:
+    src: "files/redis-7.0.12-1.el8.remi.x86_64.rpm"
+    dest: /tmp/redis-7.0.12-1.el8.remi.x86_64.rpm
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - redis_version == "7.0.12"
+    - ansible_distribution_major_version == "8"
+  tags:
+    - redis-all
+    - redis-install
+
+- name: Install redis Packages for  Centos 8
+  command: yum install /tmp/redis-7.0.12-1.el8.remi.x86_64.rpm -y
+  ignore_errors: true
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - redis_version == "7.0.12"
+    - ansible_distribution_major_version == "8"
+  tags:
+    - redis-all
+    - redis-install
+
+- name: Remove redis Packages for Centos 8
+  file:
+    path: "tmp/redis-7.0.12-1.el8.remi.x86_64.rpm"
+    state: absent
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - redis_version == "7.0.12"
+    - ansible_distribution_major_version == "8"
+  tags:
+    - redis-all
+    - redis-install
+
+##======================= END после удалить пакет из files =====================##
+
+##=======================Временное решение для AMI3 до того как закинут пакет в репо =====================##
+- name: Copy redis Packages for AMI3
+  copy:
+    src: "files/redis-7.0.12-1.fc36.remi.x86_64.rpm"
+    dest: /tmp/redis-7.0.12-1.fc36.remi.x86_64.rpm
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - ansible_distribution == "Amazon"
+    - redis_version == "7.0.12"
+    - ansible_distribution_major_version == "2023"
+  tags:
+    - redis-all
+    - redis-install
+
+- name: Install redis Packages for  AMI3
+  command: yum install /tmp/redis-7.0.12-1.fc36.remi.x86_64.rpm -y
+  ignore_errors: true
+  when:
+    - ansible_distribution == "Amazon"
+    - redis_version == "7.0.12"
+    - ansible_distribution_major_version == "2023"
+  tags:
+    - redis-all
+    - redis-install
+
+- name: Remove redis Packages for AMI3
+  file:
+    path: "tmp/redis-7.0.12-1.fc36.remi.x86_64.rpm"
+    state: absent
+  when:
+    - ansible_distribution == "Amazon"
+    - redis_version == "7.0.12"
+    - ansible_distribution_major_version == "2023"
+  tags:
+    - redis-all
+    - redis-install
+
+##======================= END после удалить пакет из files ====================
+
+- name: Create redis dirs
+  file: path={{ item }} owner=redis group=redis state=directory mode=0755
+  with_items:
+    - "{{ redis_counter_dir }}"
+    - "{{ redis_cache_dir }}"
+    - "{{ redis_timers_dir }}"
+  tags:
+    - redis-all
+    - redis-create-dirs
+
+- name: Add configs for redis
+  template:
+    src: "templates/{{ item.tmpl_name }}"
+    dest: "{{ item.conf_name }}"
+    owner: redis
+    group: root
+    mode: '0644'
+  with_items:
+    - { tmpl_name: "redis-box-counters.conf.j2", conf_name: "{{ redis_counter_conf }}" }
+    - { tmpl_name: "redis-box-cache.conf.j2", conf_name: "{{ redis_cache_conf }}" }
+    - { tmpl_name: "redis-box-timers.conf.j2", conf_name: "{{ redis_timers_conf }}" }
+  tags:
+    - redis-all
+    - redis-create-configs
+
+- name: Add redis-service for redis
+  template: src=templates/redis-service.j2 dest=/usr/lib/systemd/system/{{ item }}.service mode=0644
+  with_items:
+    - "{{ redis_counter_name }}"
+    - "{{ redis_cache_name }}"
+    - "{{ redis_timers_name }}"
+  tags:
+    - redis-all
+
+- name: Create directories for systemd .d files
+  file:
+    path: "/etc/systemd/system/{{ item }}.service.d/"
+    state: directory
+    mode: '0755'
+  with_items:
+    - "{{ redis_counter_name }}"
+    - "{{ redis_cache_name }}"
+    - "{{ redis_timers_name }}"
+  tags:
+    - redis-all
+
+- name: Create limits.conf for redis
+  template: src=templates/limits.conf.j2 dest=/etc/systemd/system/{{ item }}.service.d/limits.conf mode=0644
+  with_items:
+    - "{{ redis_counter_name }}"
+    - "{{ redis_cache_name }}"
+    - "{{ redis_timers_name }}"
+  tags:
+    - redis-all
+
+
+- name: Add pid-dir for redis
+  file: path="/var/run/{{ item }}" owner=redis group=redis state=directory mode=0755
+  with_items:
+    - "redis"
+  tags:
+    - redis-all
+    - redis-create-pid-file
+
+- name: Add pid-file for redis
+  file: path="/var/run/redis/{{ item }}.pid" owner=redis group=redis state=touch mode=0644
+  with_items:
+    - "{{ redis_counter_name }}"
+    - "{{ redis_cache_name }}"
+    - "{{ redis_timers_name }}"
+  tags:
+    - redis-all
+    - redis-create-pid-file
+
+- name: Start redis services
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: yes
+  with_items:
+    - "{{ redis_counter_name }}"
+    - "{{ redis_cache_name }}"
+    - "{{ redis_timers_name }}"
+  tags:
+    - redis-all
+    - redis-start-enable
+
+- name: Create monit file
+  template: src=templates/{{ item }}.monit.j2 dest=/etc/monit.d/{{ item }} owner=root group=root mode=0600
+  with_items:
+    - redis
+  register: monit_file
+  tags:
+    - redis-all
+    - redis-monit
+
+- name: Reload monit if config file changed
+  service:
+    name: monit
+    state: reloaded
+  when: monit_file.changed
+  tags:
+    - redis-all
+    - redis-monit

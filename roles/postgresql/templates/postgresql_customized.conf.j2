@@ -1,0 +1,97 @@
+# CONNECTIONS AND AUTHENTICATION
+
+port = {{ db_port }}
+max_connections = 1000
+
+# RESOURCE USAGE
+
+shared_buffers = 1GB
+huge_pages = try
+
+work_mem = 1048kB
+maintenance_work_mem = 256MB
+
+min_wal_size = 1GB
+max_wal_size = 2GB
+
+wal_buffers = 16MB
+#wal_buffers = -1
+
+listen_addresses = '*'
+
+shared_preload_libraries = 'pglogical'
+
+bgwriter_delay = 10000
+bgwriter_lru_maxpages = 1000
+bgwriter_lru_multiplier = 10
+
+effective_io_concurrency = 200
+max_worker_processes = 60
+#max_parallel_workers_per_gather = 6
+
+# WRITE AHEAD LOG
+
+wal_level = logical
+full_page_writes = on
+wal_log_hints = on
+
+default_statistics_target = 100
+
+checkpoint_timeout = 30min
+checkpoint_warning = 10min
+checkpoint_completion_target = 0.7
+
+archive_mode = on
+archive_command = 'exit 0'
+
+# REPLICATION
+
+max_wal_senders = 30
+wal_keep_segments = 500
+wal_sender_timeout = 10s
+max_replication_slots = 30
+track_commit_timestamp = on
+
+hot_standby = on
+hot_standby_feedback = on
+wal_receiver_timeout = 0
+
+# QUERY TUNING
+#seq_page_cost = 1.0                    # measured on an arbitrary scale
+random_page_cost = 1.1                 # same scale as above
+
+effective_cache_size = 3GB
+
+###
+log_destination = 'stderr'
+logging_collector = on
+log_directory = 'log'
+log_filename = 'postgresql-%a.log'
+log_truncate_on_rotation = on
+log_rotation_age = 1d
+log_rotation_size = 0
+###
+
+log_min_duration_statement = 200
+log_checkpoints = on
+log_line_prefix = '%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+log_lock_waits = on
+log_temp_files = 0
+log_timezone = 'UTC'
+
+# AUTOVACUUM PARAMETERS
+
+autovacuum_max_workers = 15
+autovacuum_naptime = 15s
+autovacuum_vacuum_threshold = 25000
+autovacuum_analyze_threshold = 10000
+autovacuum_vacuum_scale_factor = 0.1
+autovacuum_analyze_scale_factor = 0.05
+autovacuum_freeze_max_age = 1000000000
+autovacuum_multixact_freeze_max_age = 1000000000
+autovacuum_vacuum_cost_delay = 5ms
+autovacuum_vacuum_cost_limit = 1000
+
+# CLIENT CONNECTION DEFAULTS
+#idle_in_transaction_session_timeout = 0
+timezone = 'UTC'

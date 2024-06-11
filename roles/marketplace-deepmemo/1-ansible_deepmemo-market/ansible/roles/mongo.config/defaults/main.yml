@@ -1,0 +1,5 @@
+---
+# defaults file for mongo.config
+mongodb_admin_password: "qwertY12345"
+mongodb_deepmemo_password: "deepmemo"
+auth: false

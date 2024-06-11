@@ -1,0 +1,195 @@
+---
+# tasks file for mongo
+- name: Create dir for mongod service
+  file:
+    path: /etc/systemd/system/mongod.service.d
+    state: directory
+    recurse: yes
+    owner: root
+    group: root
+    mode: 0755
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+- name: Copy script for disabling THP
+  copy:
+    src: disable-transparent-hugepages
+    dest: /etc/init.d/disable-transparent-hugepages
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Start THP script
+  service:
+    name: disable-transparent-hugepages
+    state: started
+    enabled: yes
+
+- name: Copy limits for mongod
+  copy:
+    src: limits.conf
+    dest: /etc/systemd/system/mongod.service.d/limits.conf
+    owner: root
+    group: root
+    mode: 0644
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+- name: Setup repo for mongo
+  template:
+    src: mongo.repo.j2
+    dest: /etc/yum.repos.d/mongo.{{ mongodb_version }}.repo
+    owner: root
+    group: root
+    mode: 0600
+
+- name: Setup mongodb
+  yum:
+    name: mongodb-org
+    state: present
+
+- name: Create dir for mongo
+  file:
+    path: "{{ mongodb_db_path }}"
+    state: directory
+    recurse: yes
+    owner: "{{ mongodb_user }}"
+    group: "{{ mongodb_group }}"
+    mode: 0755
+
+- name: Setup mongo config file
+  template:
+    src: mongod.conf.j2
+    dest: /etc/mongod.conf
+    owner: root
+    group: root
+    mode: 0755
+
+- name: Setup systemd unit for mongodb
+  template:
+    src: mongod.service.j2
+    dest: /etc/systemd/system/mongod.service
+    owner: root
+    group: root
+    mode: 0644
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+- name: Delete init script from /etc/init.d
+  file:
+    path: /etc/init.d/mongod
+    state: absent
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+- name: Setup selinux rules for mongo
+  raw: "{{ item }}"
+  with_items:
+    - "semanage fcontext -a -t mongod_var_lib_t /ebsmnt/mongo.*"
+    - "semanage port -a -t mongod_port_t -p tcp 27017"
+    - "restorecon -Rv /ebsmnt/mongo"
+  when:
+    - selinux_enabled
+
+- name: Start mongod service
+  systemd:
+    name: mongod
+    state: started
+    enabled: yes
+    daemon_reload: yes
+  when:
+    - aws_centos_distribution_major_version == "7"
+
+- name: Stop mongod service
+  service:
+    name: mongod
+    state: stopped
+  when:
+    - aws_centos_distribution_major_version == "6"
+
+- name: Start mongod service
+  service:
+    name: mongod
+    state: started
+    enabled: yes
+  when:
+    - aws_centos_distribution_major_version == "6"
+
+- name: wait MongoDB port is listening
+  wait_for: host=127.0.0.1 port=27017 delay=5 state=started
+
+- name: Copy script for setup mongo admin password
+  template:
+    src: create.mongo.admin.j2
+    dest: /tmp/create.mongo.admin
+    owner: root
+    group: root
+    mode: 0644
+  when: mongodb_auth_on
+
+- name: Setup password for mongodb
+  raw: export LC_ALL=C && mongo admin /tmp/create.mongo.admin
+  when: mongodb_auth_on
+
+- name: Stop mongod service
+  systemd:
+    name: mongod
+    state: stopped
+  when:
+    - aws_centos_distribution_major_version == "7"
+    - mongodb_auth_on
+
+
+- name: Stop mongod service
+  service:
+    name: mongod
+    state: stopped
+  when:
+    - aws_centos_distribution_major_version == "6"
+    - mongodb_auth_on
+
+- name: Change auth var to true
+  set_fact:
+    auth: true
+  when: mongodb_auth_on
+
+- name: Setup mongo config file
+  template:
+    src: mongod.conf.j2
+    dest: /etc/mongod.conf
+    owner: root
+    group: root
+    mode: 0755
+  when: mongodb_auth_on
+
+- name: Start mongod service
+  systemd:
+    name: mongod
+    state: started
+  when:
+    - aws_centos_distribution_major_version == "7"
+    - mongodb_auth_on
+
+
+- name: Start mongod service
+  service:
+    name: mongod
+    state: started
+  when:
+    - aws_centos_distribution_major_version == "6"
+    - mongodb_auth_on
+
+
+- name: Detele file with admin password
+  file:
+    path: /tmp/create.mongo.admin
+    state: absent
+  when: mongodb_auth_on
+
+- name: Copy logrotate rule
+  copy:
+    src: mongo.logrotate
+    dest: /etc/logrotate.d/mongo
+    owner: root
+    group: root
+    mode: 0644

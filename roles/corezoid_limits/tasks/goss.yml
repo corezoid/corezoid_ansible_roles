@@ -1,0 +1,20 @@
+---
+- name: Copy goss tests
+  template:
+    dest: "/etc/goss.d/{{ item }}"
+    src: "tests/{{ item }}"
+    owner: root
+    group: root
+    mode: 0444
+  tags:
+    - goss_tests
+  with_items:
+    - "corezoid_limits.yml"
+
+- name: Test corezoid_limits
+  command: goss --gossfile "/etc/goss.d/{{ item }}" validate
+#    ignore_errors: yes
+  with_items:
+    - "corezoid_limits.yml"
+  tags:
+    - goss_tests

@@ -1,0 +1,6 @@
+[rabbit]
+name=redis
+baseurl=https://repo.middleware.biz/system/el7-new
+enabled=1
+gpgcheck=0
+priority=4

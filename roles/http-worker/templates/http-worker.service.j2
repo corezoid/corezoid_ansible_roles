@@ -1,0 +1,45 @@
+[Unit]
+Description=Corezoid {{ item }} Application
+{% if box_server is defined and box_server == true %}
+After=network.target postgresql-{{ db_version }}.service redis.service redis2.service elasticsearch.service pgbouncer.service rabbitmq-server.service
+{% else %}
+After=network.target
+{% endif%}
+
+[Service]
+#The type could be different , depends on many things
+#not necessary but if it uses pid file - describe it
+Type=forking
+PermissionsStartOnly=true
+
+User=app-user
+Group=app-user
+
+#PIDFile=/var/run/http-worker/http_worker.pid
+ExecStartPre=/bin/mkdir -p /var/run/http-worker
+ExecStartPre=/bin/chown app-user:app-user /var/run/http-worker
+
+Environment=CONFIG_PATH=/ebsmnt/conf/http_worker.config
+Environment=HOME=/ebsmnt/erlang/http-worker
+
+{% if ansible_distribution_version == "7.5" %}
+ExecStart=/ebsmnt/erlang/http-worker/bin/http_worker start
+{% else %}
+ExecStart=/ebsmnt/erlang/http-worker/bin/http_worker start
+{% endif %}
+ExecStartPost=/bin/sh -c 'echo $MAINPID > /var/run/http-worker/http_worker.pid'
+
+{% if ansible_distribution_version == "7.5" %}
+ExecStop=/ebsmnt/erlang/http-worker/bin/http_worker stop
+{% else %}
+ExecStop=/ebsmnt/erlang/http-worker/bin/http_worker stop
+{% endif %}
+ExecStopPost=/bin/sh -c 'rm -fr /var/run/http-worker/http_worker.pid'
+
+#Automatic restart by systemd
+Restart=always
+#Time for system to wait before restart
+#Restartsec=42s
+
+[Install]
+WantedBy=multi-user.target

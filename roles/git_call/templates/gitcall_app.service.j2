@@ -1,0 +1,25 @@
+[Unit]
+Description=<corezoid {{ item }} service>
+#The service will wait for  networking and syslog
+#After=syslog.target network.target
+
+[Service]
+#The type could be different , depends on many things
+#not necessary but if it uses pid file - describe it
+Type=simple
+
+PIDFile=/var/run/{{ item }}/{{ item }}.pid
+ExecStart=/etc/init.d/{{ item }} start
+#if the service supports reload - tell system how to reload it
+ExecReload=/etc/init.d/{{ item }} reload
+
+#necessary - tells system how to stop the service
+ExecStop=/etc/init.d/{{ item }} stop
+
+#Automatic restart by systemd
+Restart=on-failure
+#Time for system to wait before restart
+#Restartsec=42s
+
+[Install]
+WantedBy=multi-user.target

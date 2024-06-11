@@ -1,0 +1,28 @@
+- name: Make certs folder
+  file: path={{ license_file_path }} owner="{{ app_user }}" group="{{ app_user }}" state=directory mode=0755
+  when: license_as_file
+  tags:
+    - license-server-all
+    - license-server-config
+
+- name: Upload license for Corezoid 5.x
+  copy:
+    src: "{{ ls_local_filedir }}/{{ item }}"
+    dest: "{{ license_file_path }}/{{ item }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: 0644
+  when: license_as_file
+  with_items:
+    - "{{ license_file_name }}"
+  tags:
+    - license-server-all
+    - license-server-upload-files
+
+
+# - name: Add old license
+#   include: license_old.yml
+#   when: not license_as_file
+#   tags:
+#      - license-server-all
+#      - license-server-old

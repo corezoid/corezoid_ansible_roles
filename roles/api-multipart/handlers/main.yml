@@ -1,0 +1,16 @@
+---
+# handlers file for roles/api-multipart
+- name: Restart conveyor_api_multipart
+  service: name=conveyor_api_multipart state=restarted enabled=yes
+  tags:
+    - api-multipart-all
+    - api-multipart-monit
+
+- name: Reload monit if config file changed
+  service:
+    name: monit
+    state: reloaded
+  when: monit_file.changed
+  tags:
+    - api-multipart-all
+    - api-multipart-monit

@@ -1,0 +1,7 @@
+---
+# MongoDB install
+- hosts: mongod_servers
+  become: true
+  roles:
+  - role: common
+  - role: mongod

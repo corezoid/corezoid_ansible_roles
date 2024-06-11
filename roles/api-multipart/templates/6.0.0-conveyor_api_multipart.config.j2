@@ -1,0 +1,438 @@
+[
+  {kernel, [
+    {inet_dist_listen_min, {{ api_mult_cluster_port }}},
+    {inet_dist_listen_max, {{ api_mult_cluster_port }}}
+  ]},
+
+  {corezoid_sdk, [
+    {host, "https://{{ capi_endpoint }}"} %% corezoid domain
+  ]},
+
+  {is_ready, [
+    {port, 8383}
+  ]},
+
+{% if licence_db_enabled == "true" %}
+  {corezoid_license_client, [
+     {driver, "db"},
+       {pgsql, [
+       {host, "{{ db_main.host }}"},
+       {user, "{{ db_main.user }}"},
+       {dbname, "settings"},
+       {password, "{{ db_main.pass }}"}
+       ]}
+  ]},
+{% else %}
+  {corezoid_license_client, [
+    {driver, "fs"},
+    {path_to_license, "{{ top_dir }}/certs/{{ license_file_name }}"}
+  ]},
+{% endif %}
+
+  %% for clustering components
+  {corezoid_cluster, [
+    {backend, redis}, %% maybe if future list will increase
+    {redis, [
+      {host, "{{ redis_cache[0].host }}"},
+      {port, {{ redis_cache[0].port }}},
+      {database, 10},
+      {password, "{{ redis_cache_password | default("") }}"}
+    ]},
+    {interconnect_with, [
+      capi
+    ]}
+  ]},
+
+   %% merge storage
+   {corezoid_global_storage, [
+      {backend, redis}, %% maybe if future list will increase
+      {redis, [
+          {host, "{{ redis_cache[0].host }}"},
+          {port, {{ redis_cache[0].port }}},
+          {database, 9},
+          {password, "{{ redis_cache_password | default("") }}"}
+     ]}
+   ]},
+
+  {corezoid_queues_gc, [
+    {disabled, true},
+    {host, "{{ rmq_http[0].host }}"},
+    {port, 15672},
+    {vhost, "{{ rmq_http[0].vhost }}"},
+    {login, "conveyor_gc"},
+    {password, "{{ rmq_http[0].pass }}"},
+    {gc_queues_regexp, ["mult.ctrl", "settings", "conf_agent_client_queue_conveyor_api_multipart",
+                        "ermql_license_distributor_request_conveyor_api_multipart", "mw_component_version_client_queue_conveyor_api_multipart"]}
+  ]},
+
+  {dns_cache, [
+    {servers, [
+{% for item in rmq_core %}
+      [
+        {name, {{ item.dns_cache_name }}},
+        {dns, "{{ item.host }}"},
+        {ttl, {{ dns_cache_ttl | default(60) }}}
+      ],
+{% endfor %}
+      [
+        {name, {{ rmq_http[0].dns_cache_name }}},
+        {dns, "{{ rmq_http[0].host }}"},
+        {ttl, {{ dns_cache_ttl | default(60) }}}
+      ]
+    ]}
+  ]},
+
+  {ermql, [
+
+    {disabled, false},
+
+    {publish_request, [
+      {servers, [
+        [
+          %%{dns_name, item.dns_cache_name},
+          {host, "{{ rmq_http[0].host }}"},
+          {port, {{ rmq_http[0].port }}},
+          {username, <<"{{ rmq_http[0].user }}">>},
+          {password, <<"{{ rmq_http[0].pass }}">>},
+          {vhost, <<"{{ rmq_vhost }}">>}
+        ]
+      ]},
+      {queues_count, 1},
+      {min_size, 1},
+      {max_size, 1},
+      {start_size, 1}
+    ]},
+
+    {consumer_response, [
+      {servers, [
+        [
+          %%{dns_name, item.dns_cache_name},
+          {host, "{{ rmq_http[0].host }}"},
+          {port, {{ rmq_http[0].port }}},
+          {username, <<"{{ rmq_http[0].user }}">>},
+          {password, <<"{{ rmq_http[0].pass }}">>},
+          {vhost, <<"{{ rmq_vhost }}">>}
+        ]
+      ]},
+      {connections_per_queue, 1},
+      {channels_per_connection, 1},
+      {messages_prefetch_size_per_channel, 50}
+    ]}
+  ]},
+{% if enigma_is_enabled == "true" %}
+  {enigma, [
+    {is_enabled, {{ enigma_is_enabled }}},
+    {private_key_id, "{{ enigma_private_key_id }}"},
+    {key_manager_host, "{{ enigma_key_manager_host }}"},
+
+    {client_cert, "{{ enigma_client_cert }}"},
+    {client_key, "{{ enigma_client_key }}"},
+    {ca_cert, "{{ enigma_ca_cert }}"},
+
+    {rotors_pool, [
+      {min_size, 5},
+      {max_size, 5},
+      {start_size, 5}
+    ]}
+  ]},
+{% else %}
+  {enigma, [
+    {is_enabled, {{ enigma_is_enabled }}}
+  ]},
+{% endif %}
+
+  {corezoid_fs, [
+
+    {profiles, [
+
+      [
+        {name, versions}, %% Temp storage for process schemas
+        %% switch between storages
+        {default_file_storage, file_f3},
+        %% s3 settings
+        %%{amazon_s3, [
+        %%  {s3_profile, scheme},
+        %%  {opts, [{acl, public_read}, {meta, [{"Cache-Control", "max-age=86400"}]}]},
+        %%  {type, <<"credentials">>}, %% <<"credentials">> (by default) | <<"env">> | <<"role">>
+        %%  {bucket, "{{ capi_endpoint }}-scheme"}
+        %%]},
+
+        %% f3 file storage settings
+        {file_f3,[
+          {allowed_namespaces, ["1", "2", "3"]}, %% Schema versions
+          {path_to_dir, "{{ api_mult_file_f3_path_to_dir }}/versions" },
+          {network_partition, false},     %% Monitor network share process (if true -> grep PATH_TO_DIR /proc/mounts)
+          {ttl_file, 432000}                 %% file ttl in seconds
+        ]}
+      ],
+      %% profile name for schemas
+      [
+        {name, schemas}, %% Temp storage for process schemas
+
+        %% switch between storages
+        {default_file_storage, file_f3},
+
+        %% s3 settings
+        %%{amazon_s3, [
+        %%  {s3_profile, scheme},
+        %%  {opts, [{acl, public_read}, {meta, [{"Cache-Control", "max-age=86400"}]}]},
+        %%  {type, <<"credentials">>}, %% <<"credentials">> (by default) | <<"env">> | <<"role">>
+        %%  {bucket, "{{ capi_endpoint }}-scheme"}
+        %%]},
+
+        %% f3 file storage settings
+        {file_f3,[
+          {path_to_dir, "{{ api_mult_file_f3_path_to_dir }}"},
+          {network_partition, false},     %% Monitor network share process (if true -> grep PATH_TO_DIR /proc/mounts)
+          {ttl_file, {{ api_mult_ttl_file | default(60) }}}                 %% file ttl in seconds
+        ]}
+
+      ],
+
+      %% marketplace only s3
+      [
+        {name, market_logos}, %% Storage for marketplace logos
+        %% switch between storages
+        {default_file_storage, file_f3},
+
+        %% s3 settings
+        %%{amazon_s3, [
+        %%  {s3_profile, scheme},
+        %%  {opts, [{acl, public_read}, {meta, [{"Cache-Control", "max-age=86400"}]}]},
+        %%  {type, <<"role">>}, %% <<"credentials">> (by default) | <<"env">> | <<"role">>
+        %%  {bucket, "{{ capi_endpoint }}-scheme"}
+        %%]},
+
+        %% f3 file storage settings
+        {file_f3,[
+          {allowed_namespaces, ["scheme"]},
+          {path_to_dir, "{{ top_dir }}/www/market"},
+          {network_partition, false},     %% Monitor network share process (if true -> grep {{ top_dir }}/www/market /proc/mounts)
+          {ttl_file, {{ api_mult_ttl_file | default(60) }}}                 %% file ttl in seconds
+        ]}
+      ]
+    ]}
+
+  ]},
+
+  %% ---- INDIVIDUAL PARAMETR FOR THIS WORKER -------
+  {conveyor_api_multipart,
+    [
+      {nodes, [
+        ''
+      ]},
+
+      {replace_schema_values, [
+{% if mult_replace_public_url is defined %}
+      {public_url, false} % true by default
+{% else %}
+      {public_url, true} % true by default
+{% endif %}
+      ]},
+
+      {max_upload_tasks, 5},          %% Number of simultaneous uploads (optional, default 3)
+      {max_upload_tasks_per_user, 5}, %% Number of simultaneous uploads per user (optional, default equal max_upload_tasks)
+
+      {tmp_dir, "{{ mult_tmp_dir }}"},
+
+      {mult_id, <<"mult-{{ mult_id | default(ansible_default_ipv4.address) }}">>},                          %% personal queue for this node
+      {port, {{ api_mult_port }}},
+      {garb_timeout,3600000},                       %% in ms timeout garbage collector
+      {publisher_timeout,1000},                     %% timeout in ms for send packet #csv_info_data{}
+      {api_throughput_tasks,{{ mult_api_throughput_tasks| default(7000000) }}},               %% limit for download tasks from api
+      {max_filesize, {{ max_filesize | default(200000000) }}},                     %% in byte max size to upload .csv file
+      {max_filesize_scheme, 200000000},             %% in byte max size to upload .json and .zip file with scheme
+      {list_fileformat, [<<"all">>]},               %% format of file have bin  alowed to upload
+{% if box_server is defined and box_server == "true" %}
+      {url, "http://localhost:9080/api/2/json"},    %% url capi when http client send requests
+{% else %}
+      {url, "https://{{ capi_endpoint }}/api/2/json"},    %% url capi when http client send requests
+{% endif %}
+      {too_many_req_wait, 1000},                    %% time in ms wait after  capi return <<"too many requests">>
+      {api_res_wait, 5000},                         %% timeout in ms wait responce after  http_client send request
+
+      {download_limit_request,1000},
+{% if api_mult_login_id is defined and api_mult_login_id != "" %}
+      {login_id, "{{ api_mult_login_id | default("") }}"},
+      {login_secret , <<"{{ api_mult_login_secret | default("") }}">>},
+{% endif %}
+      %% ---- JOINT PARAMETR  WORKER AND CAPI -------
+
+      {main_page, "https://{{ capi_endpoint }}"},              %% NB! this parametr MUST BE equal to the 'main_page'   in capi.config because parametr
+
+      {cookie_name, <<"{{ capi_cookie_name }}">>},                     %% the same with api
+      {api_secret, <<"{{ capi_api_secret_enc }}">>},             %% the same with api
+
+      {publish_capi_connector_request, [
+        {servers, [[
+          %%{dns_name, name5},
+          {host, '{{ rmq_http[0].host }}'},
+          {port, {{ rmq_http[0].port }}},
+          {username, <<"{{ rmq_http[0].user }}">>},
+          {password, <<"{{ rmq_http[0].pass }}">>},
+          {vhost, <<"{{ rmq_vhost }}">>}
+        ]]},
+        {queues_count, 1},
+        {min_size, 1},
+        {max_size, 1},
+        {start_size, 1}
+      ]},
+
+      %%  need for download action
+      %%    ******************************
+      {publish_user_actions_request, [
+        {servers, [[
+          %%{dns_name, name5},
+          {host, '{{ rmq_http[0].host }}'},
+          {port, {{ rmq_http[0].port }}},
+          {username, <<"{{ rmq_http[0].user }}">>},
+          {password, <<"{{ rmq_http[0].pass }}">>},
+          {vhost, <<"{{ rmq_vhost }}">>}
+        ]]},
+        {queues_count, 1},
+        {min_size, 2},
+        {max_size, 2},
+        {start_size, 2}
+      ]},
+
+      %%   ************end block***********
+      %%    ******************************
+      %% продюсер настроек
+      {publish_settings, [
+        {servers, [[
+          %%{dns_name, name5},
+          {host, '{{ rmq_http[0].host }}'},
+          {port, {{ rmq_http[0].port }}},
+          {username, <<"{{ rmq_http[0].user }}">>},
+          {password, <<"{{ rmq_http[0].pass }}">>},
+          {vhost, <<"{{ rmq_vhost }}">>}
+        ]]},
+        {min_size, 1},
+        {max_size, 1},
+        {start_size, 1}
+      ]},
+
+      %% консьюмер настроек
+      {consumer_settings, [
+        {servers, [[
+          %%{dns_name, name5},
+          {host, '{{ rmq_http[0].host }}'},
+          {port, {{ rmq_http[0].port }}},
+          {username, <<"{{ rmq_http[0].user }}">>},
+          {password, <<"{{ rmq_http[0].pass }}">>},
+          {vhost, <<"{{ rmq_vhost }}">>}
+        ]]},
+        {connections_per_queue, 1},
+        {channels_per_connection, 1},
+        {messages_prefetch_size_per_channel, 50}
+      ]},
+
+      %% work in pair with conveyor_api worker
+      %% through this queue goes tasks with loading statistics to api
+      {capi_consumer, [
+        {servers, [[
+          {host, '{{ rmq_http[0].host }}'},
+          {port, {{ rmq_http[0].port }}},
+          {username, <<"{{ rmq_http[0].user }}">>},
+          {password, <<"{{ rmq_http[0].pass }}">>},
+          {vhost, <<"{{ rmq_vhost }}">>}
+        ]]},
+        {queues_count, 1},
+        {connections_per_queue, 1},
+        {channels_per_connection, 1},
+        {messages_prefetch_size_per_channel, 1}
+      ]}
+
+    ]
+  },
+
+  {lager, [
+    %% What handlers to install with what arguments
+    {handlers, [
+      {capi_lager_event_handler, error},
+      {lager_console_backend, info},
+      {lager_file_backend, [
+        {file, "log/error.log"},
+        {level, error},
+        {size, 10485760},
+        {date, "$D0"},
+        {count, 5}
+      ]},
+      {lager_file_backend, [
+        {file, "log/console.log"},
+        {level, info},
+        {size, 10485760},
+        {date, "$D0"},
+        {count, 5}
+      ]},
+      {lager_file_backend, [
+        {file, "log/notice.log"},
+        {level, notice},
+        {size, 10485760},
+        {date, "$D0"},
+        {count, 5}
+      ]},
+      {lager_file_backend, [
+        {file, "log/warning.log"},
+        {level, warning},
+        {size, 10485760},
+        {date, "$D0"},
+        {count, 5}
+      ]}
+    ]},
+    %% What colors to use with what log levels
+    {colored, true},
+    {colors, [
+        {debug,     "\e[0;38m" },
+        {info,      "\e[1;37m" },
+        {notice,    "\e[1;36m" },
+        {warning,   "\e[1;33m" },
+        {error,     "\e[1;31m" },
+        {critical,  "\e[1;35m" },
+        {alert,     "\e[1;44m" },
+        {emergency, "\e[1;41m" }
+    ]},
+    %% Whether to write a crash log, and where. Undefined means no crash logger.
+    {crash_log, "crash.log"},
+    %% Maximum size in bytes of events in the crash log - defaults to 65536
+    {crash_log_msg_size, 65536},
+    %% Maximum size of the crash log in bytes, before its rotated, set
+    %% to 0 to disable rotation - default is 0
+    {crash_log_size, 10485760},
+    %% What time to rotate the crash log - default is no time
+    %% rotation. See the README for a description of this format.
+    {crash_log_date, "$D0"},
+    %% Number of rotated crash logs to keep, 0 means keep only the
+    %% current one - default is 0
+    {crash_log_count, 5},
+    %% Whether to redirect error_logger messages into lager - defaults to true
+    {error_logger_redirect, true},
+    %% How many messages per second to allow from error_logger before we start dropping them
+    {error_logger_hwm, 50},
+    %% How big the gen_event mailbox can get before it is switched into sync mode
+    {async_threshold, 20},
+    %% Switch back to async mode, when gen_event mailbox size decrease from `async_threshold'
+    %% to async_threshold - async_threshold_window
+    {async_threshold_window, 5}
+]},
+{% if hc_server_disabled == "false" %}
+  %% Client for server healthcheck
+  {hcheck_sender, [
+      {host, <<"{{ hc_server_host }}">>}, %% host of the remote healthcheck server
+      {port, {{ hc_server_port }}}, %% port of the remote healthcheck server
+      {node_name, <<"multipart-{{ mult_id | default(ansible_default_ipv4.address) }}">> }, %% different for each node
+      {node_type, <<"multipart">> }, %% capi | worker | multipart | http_worker | usercode | deepmemo ...
+      {disabled, {{ hc_server_disabled }}}, %% true by default
+      {send_interval_sec, {{ hc_server_send_interval_sec | default(30) }}}, %% by default 10 sec
+      {send_system_counters, true} %% memory processes etc, false by default
+  ]},
+{% else %}
+  {hcheck_sender, [
+      {disabled, {{ hc_server_disabled }}} %% true by default
+  ]},
+{% endif %}
+
+  {erlprometheus, [
+    {port, {{ mult_prometheus_port }}}
+  ]}
+].

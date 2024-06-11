@@ -1,0 +1,61 @@
+- debug: msg="{{ viewer_user.name }}"
+  tags:
+    - pgsql-all
+    - pgsql-create-viewers
+
+- name: create viewer user
+  postgresql_user:
+    db: postgres
+    name: "{{ viewer_user.name }}"
+    password: "{{ viewer_user.password }}"
+    port: "{{ db_main.port }}"
+    encrypted: yes
+  tags:
+    - pgsql-all
+    - pgsql-create-viewers
+
+# - name: Grant "viewers" role to user
+#   postgresql_privs:
+#     db: postgres
+#     type: group
+#     objs: viewers
+#     roles: "{{ viewer_user.name }}"
+#     grant_option: no
+#     port: "{{ db_main.port }}"
+#   tags:
+#     - pgsql-all
+#     - pgsql-create-viewers
+
+- name: Grant role to app user
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} postgres -U postgres -Atc "GRANT viewers TO {{ viewer_user.name }};"
+  when: not aws_rds
+  tags:
+    - pgsql-all
+    - pgsql-create-viewers
+
+# - debug: msg="{{ viewer_user.name }}"
+
+# - name: create viewer user
+#   postgresql_user: >
+#     db=postgres
+#     name={{ viewer_user.name }}
+#     password={{ viewer_user.password }}
+#     login_host={{ init_db_host }}
+#     port={{ init_db_port }}
+#     login_user={{ db_superuser_login }}
+#     login_password={{ db_superuser_password }}
+#     encrypted=yes
+
+# - name: grant "viewers" role to user
+#   postgresql_privs: >
+#     db=postgres
+#     type=group
+#     objs=viewers
+#     roles={{ viewer_user.name }}
+#     grant_option=no
+#     login_host={{ init_db_host }}
+#     port={{ init_db_port }}
+#     login_user={{ db_superuser_login }}
+#     login_password={{ db_superuser_password }}

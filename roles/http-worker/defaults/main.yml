@@ -1,0 +1,4 @@
+---
+# defaults file for http-worker
+
+http_worker_prometheus_port: 9102
