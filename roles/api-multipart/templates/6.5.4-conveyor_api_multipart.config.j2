@@ -166,8 +166,8 @@
         {file_f3,[
           {allowed_namespaces, ["1", "2", "3"]}, %% Schema versions
           {path_to_dir, "{{ api_mult_file_f3_path_to_dir }}/versions" },
-          {network_partition, false},     %% Monitor network share process (if true -> grep PATH_TO_DIR /proc/mounts)
-          {ttl_file, 432000}                 %% file ttl in seconds
+          {network_partition, false}     %% Monitor network share process (if true -> grep PATH_TO_DIR /proc/mounts)
+          %%{ttl_file, 432000}                 %% file ttl in seconds
         ]}
       ],
       %% profile name for schemas
