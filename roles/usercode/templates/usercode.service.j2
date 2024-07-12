@@ -20,7 +20,7 @@ ExecStartPre=/bin/mkdir -p /var/run/usercode
 ExecStartPre=/bin/chown app-user:app-user /var/run/usercode
 
 Environment=CONFIG_PATH=/ebsmnt/conf/usercode.config
-Environment=LD_LIBRARY_PATH=/opt/gcc/gcc-6.2.0/lib64/
+#Environment=LD_LIBRARY_PATH=/opt/gcc/gcc-6.2.0/lib64/
 Environment=HOME=/ebsmnt/erlang/usercode
 
 {% if ansible_distribution_version == "7.5" %}

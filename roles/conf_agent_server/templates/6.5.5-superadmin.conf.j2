@@ -1,0 +1,46 @@
+server {
+    listen 80;
+        server_name  {{ superadmin_endpoint }};
+        rewrite ^/(.*)$ https://$host/$1 permanent;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name  {{ superadmin_endpoint }};
+    include ssl/cert-corezoid;
+
+    location / {
+    root   {{ top_dir }}/www/conf-agent-client;
+        index  index.html index.htm;
+    }
+
+    location /f {
+        root {{ top_dir }}/www/conf-agent-client;
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api {
+        proxy_pass http://conf-agent-client-backend/api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+
+    }
+
+    location /auth {
+        proxy_pass http://mw-api-backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+
+    }
+
+    location /system {
+        proxy_pass http://mw-api-backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP $remote_addr;
+
+    }
+
+}

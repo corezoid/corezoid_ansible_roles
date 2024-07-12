@@ -160,6 +160,48 @@
 
 ##======================= END после удалить пакет из files ====================
 
+
+##======================= AMI3 ARM  =====================##
+- name: Copy redis Packages for AMI3
+  copy:
+    src: "files/redis-7.2.4-1.el9.remi.aarch64.rpm"
+    dest: /tmp/redis-7.2.4-1.el9.remi.aarch64.rpm
+    owner: root
+    group: root
+    mode: '0644'
+  when:
+    - ansible_distribution == "Amazon"
+    - redis_version == "7.2.4"
+    - ansible_distribution_major_version == "2023" and ansible_architecture == 'aarch64'
+  tags:
+    - redis-all
+    - redis-install
+
+- name: Install redis Packages for  AMI3
+  command: yum install /tmp/redis-7.2.4-1.el9.remi.aarch64.rpm -y
+  ignore_errors: true
+  when:
+    - ansible_distribution == "Amazon"
+    - redis_version == "7.2.4"
+    - ansible_distribution_major_version == "2023" and ansible_architecture == 'aarch64'
+  tags:
+    - redis-all
+    - redis-install
+
+- name: Remove redis Packages for AMI3
+  file:
+    path: "tmp/redis-7.2.4-1.el9.remi.aarch64.rpm"
+    state: absent
+  when:
+    - ansible_distribution == "Amazon"
+    - redis_version == "7.2.4"
+    - ansible_distribution_major_version == "2023" and ansible_architecture == 'aarch64'
+  tags:
+    - redis-all
+    - redis-install
+
+##======================= END после удалить пакет из files ====================
+
 - name: Create redis dirs
   file: path={{ item }} owner=redis group=redis state=directory mode=0755
   with_items:

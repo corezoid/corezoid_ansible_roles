@@ -8,26 +8,27 @@
   tags:
     - usercode-all
     - usercode-install
+# old usercode
+#=============================================
+#- name: Add gcc.repo
+#  template:
+#    src: gcc.repo
+#    dest: /etc/yum.repos.d/gcc.repo
 
-- name: Add gcc.repo
-  template:
-    src: gcc.repo
-    dest: /etc/yum.repos.d/gcc.repo
-
-- name: Install gcc packages
-  yum:
-    name: "{{ item }}"
-    state: present
-    update_cache: yes
-    disablerepo: "*"
-    enablerepo: "gcc"
-    disable_gpg_check: yes
-  with_items:
-    - "gcc-libs-0.0.3"
-  tags:
-    - usercode-all
-    - usercode-install
-
+#- name: Install gcc packages
+#  yum:
+#    name: "{{ item }}"
+#    state: present
+#    update_cache: yes
+#    disablerepo: "*"
+#    enablerepo: "gcc"
+#    disable_gpg_check: yes
+#  with_items:
+#    - "gcc-libs-0.0.3"
+#  tags:
+#    - usercode-all
+#    - usercode-install
+#=============================================
 - name: Install packages
   yum:
     name: "{{ item }}"
@@ -127,9 +128,9 @@
     - usercode-all
     - usercode-initd
     - usercode-systemd
-  when:
-    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
+#  when:
+#    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS"
+#    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
 - name: check usercode.service.d folder
   stat:
@@ -157,7 +158,7 @@
   when:
     - systemd_folder_check.stat.isreg is not defined
     - ansible_os_family == "RedHat" or ansible_os_family == "CentOS" or ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
   tags:
     - usercode-all
     - usercode-app
@@ -185,7 +186,7 @@
   when:
     # - systemd2_folder_check.stat.isreg
     - ansible_os_family == "RedHat" or ansible_os_family == "CentOS" or ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
   tags:
     - usercode-all
     - usercode-app
@@ -231,3 +232,4 @@
   tags:
     - usercode-all
     - usercode-cron
+
