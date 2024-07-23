@@ -398,6 +398,9 @@
         {origin_whitelist, [{{ capi_origin_whitelist }}]},
 {% endif %}
         {use_limits_from_server, {{ capi_use_limits_from_server | default("false") }}},
+{% if admin_bearer_token_secret is defined %}
+        {admin_bearer_token_secret, <<"{{ admin_bearer_token_secret }}">>},
+{% endif %}
 
 {% if capi_auth_single_account is defined and capi_auth_single_account == "true" %}
         {sa_initial_credentials, [
@@ -410,11 +413,6 @@
           {full_name, "Corezoid process engine"},
           {capi_site_auth_single_account, true } %% DEFAULT false, On/off sa authorization on corezoid
         ]},
-{% endif %}
-
-{% if admin_bearer_token_secret is defined %}
-        %% work with jwt-tokens
-        {admin_bearer_token_secret, <<{{ admin_bearer_token_secret }}>>},
 {% endif %}
 
 {% if capi_time_zone_diff is defined %}
