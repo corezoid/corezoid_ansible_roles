@@ -21,3 +21,27 @@
   tags:
     - pgsql-all
     - pgsql-deploy-schema
+
+- name: GRANT postgres_fdw public  {{ local_db }}
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} -U postgres {{ local_db }} -Atc "GRANT ALL PRIVILEGES ON SCHEMA public TO appusers;"
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: GRANT postgres_fdw {{ local_db }}
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} -U postgres {{ local_db }} -Atc "GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO appusers"
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+    -
+- name: GRANT pg_user_mapping {{ local_db }}
+  become: yes
+  become_user: postgres
+  shell: psql -p {{ db_main.port }} -U postgres {{ local_db }} -Atc "GRANT SELECT ON TABLE pg_user_mapping TO appusers;"
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
