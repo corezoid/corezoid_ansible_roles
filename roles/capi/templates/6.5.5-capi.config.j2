@@ -462,7 +462,7 @@
 {% elif db_call or db_callv2 == true and git_call == false and sender_ui == false %}
       {components, [<<"db_call">>]}, %% Enabling/disabling components. Uses mostly by frontend
 {% elif db_call or db_callv2 == true and git_call == true and sender_ui == false %}
-      {components, [<<"git_call">>, <<"db_call">>>>]}, %% Enabling/disabling components. Uses mostly by frontend
+      {components, [<<"git_call">>, <<"db_call">>]}, %% Enabling/disabling components. Uses mostly by frontend
 {% elif db_call or db_callv2 == false and git_call == true and sender_ui == true %}
       {components, [<<"git_call">>, <<"sender">>]}, %% Enabling/disabling components. Uses mostly by frontend
 {% elif db_call or db_callv2 == true and git_call == false and sender_ui == true %}
