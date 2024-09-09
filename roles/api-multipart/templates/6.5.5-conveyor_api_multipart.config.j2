@@ -188,7 +188,7 @@
         %% f3 file storage settings
         {file_f3,[
           {path_to_dir, "{{ api_mult_file_f3_path_to_dir }}"},
-          {network_partition, false},     %% Monitor network share process (if true -> grep PATH_TO_DIR /proc/mounts)
+          {network_partition, {{ file_f3_network_partition | default(false) | lower }}},     %% Monitor network share process (if true -> grep PATH_TO_DIR /proc/mounts)
           {ttl_file, {{ api_mult_ttl_file | default(60) }}}                 %% file ttl in seconds
         ]}
 
@@ -211,7 +211,7 @@
         {file_f3,[
           {allowed_namespaces, ["readiness_test"]},
           {path_to_dir, "/ebsmnt_share"},
-          {network_partition, false},     %% Monitor network share process (if true -> grep /ebsmnt_share /proc/mounts)
+          {network_partition, {{ file_f3_network_partition | default(false) | lower }}},     %% Monitor network share process (if true -> grep /ebsmnt_share /proc/mounts)
           {ttl_file, {{ api_mult_ttl_file | default(60) }}}                 %% file ttl in seconds
         ]}
       ]
