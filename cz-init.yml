@@ -1,0 +1,29 @@
+ - hosts: cz_all
+   become: true
+   vars_files:
+     - vars/box.yml
+     - vars/box-credentials.yml
+   roles:
+#     - { role: yum,
+#         yum_s3_bucket: "corezoid",
+#         yum_s3_bucket_prefix: "{{ corezoid_release }}/redhat/7" }
+#     - { role: system, create_lvm: false, device_path: /dev/xvdb, opt_sym_link: true }
+#     - { role: redis, redis_version: "7.0.12" }
+#     - role: elasticsearch
+#     - role: rabbitmq
+#     - { role: postgresql, aws_rds: false, pgdg96: true }
+#     - role: license-server
+#     - role: conf_agent_server
+#     - role: corezoid_limits
+#     - role: capi
+#     - role: api-multipart
+#     - role: sync-api #--tags=corezoid_api_sync-app
+#     - role: http-worker
+#     - role: usercode
+#     - role: worker
+#     - role: front_capi
+
+
+
+
+

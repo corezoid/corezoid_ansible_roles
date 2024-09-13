@@ -1,0 +1,4 @@
+[cz_all]
+127.0.0.1 hostname=testhost
+[cz_all:vars]
+ansible_ssh_user=testuser

@@ -1,0 +1,474 @@
+top_dir: "/ebsmnt"
+top_dir_clear: "ebsmnt"
+conf_dir: "{{ top_dir }}/conf"
+
+top_db_dir: "/postgresqldata"
+db_dir: "{{ top_db_dir }}/pgsql"
+
+app_user: "app-user"
+shards: [0,1,2,3,4,5,6,7,8,9]
+shards_numbers: [0,1,2,3,4,5,6,7,8,9]
+shards_count: "{{ shards_numbers|length }}"
+real_db_numbers: [0,1,2,3,4,5,6,7,8,9]
+shards_numbers_on_db_1: "{{ real_db_numbers }}"
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+datacenter: "aws"
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+change_nameservers: false
+box_server: false
+
+autoscale: false
+
+install_all_in_one: false
+zabbix_host: "127.0.0.1"
+zabbix_disabled: "true"
+prometheus_metrics: "false"
+
+corezoid_release: 6.5.5
+
+corezoid_release_app_version:
+  capi: "8.3.9.1"
+  conf_agent_server: "2.6.1"
+  conf-agent-client: "2.6.1"
+  corezoid_limits: "2.4.1"
+  corezoid_web_admin: "6.5.5"
+  http_worker: "4.1.5.1"
+  worker: "5.1.6.1"
+  usercode: "9.0.1"
+  mult: "3.2.7.1"
+  sync_api: "3.5.1"
+
+# license_server
+licence_db_enabled: "false" # поставить тру если есть в базе
+license_as_file: "true"
+license_file_path: "{{ top_dir }}/certs"
+license_file_name: "licence"
+
+ls_local_filedir: "files"
+
+#worker settins
+pub_to_worker_pool_start: 5
+
+apps_id_sufix: "cz"
+
+capi:
+  version: "{{ corezoid_release_app_version.capi }}"
+  config: "{{ conf_dir }}/capi.config"
+
+
+
+corezoid_limits:
+  version: "{{ corezoid_release_app_version.corezoid_limits }}"
+  config: "{{ conf_dir }}/corezoid_limits.config"
+corezoid_limits_config: "{{ conf_dir }}/corezoid_limits.config"
+
+conf_agent_server:
+  version: "{{ corezoid_release_app_version.conf_agent_server }}"
+  config: "{{ conf_dir }}/conf_agent_server.config"
+conf_agent_server_config: "{{ conf_dir }}/conf_agent_server.config"
+
+
+corezoid_web_admin:
+  version: "{{ corezoid_release_app_version.corezoid_web_admin }}"
+
+http_worker:
+  version: "{{ corezoid_release_app_version.http_worker }}"
+  config: "{{ conf_dir }}/http_worker.config"
+
+worker:
+  version: "{{ corezoid_release_app_version.worker }}"
+  config: "{{ conf_dir }}/worker.config"
+
+usercode:
+  version: "{{ corezoid_release_app_version.usercode }}"
+  config: "{{ conf_dir }}/usercode.config"
+
+corezoid_api_sync:
+  config: "{{ conf_dir }}/corezoid_api_sync.config"
+  domain: "syncapi-domain"
+  app_port: 8092
+  api_user_id: 3
+  api_user_secret: sfsfsdfs9dfsdfsdfsdfssdfs"
+  max_timeout: 180000
+
+corezoid_api_sync_nginx:
+  upstreams:
+    - { host: "127.0.0.1" }
+
+
+merchant_api: false
+
+capi_endpoint: "corezoid-domain"
+capi_cookie_name: "corezoid-domain"
+capi_main_domain: "{{ capi_endpoint }}"
+
+capi_admin_url1: "{{ capi_endpoint }}"
+capi_admin_url2: "{{ capi_admin_url1 }}"
+
+superadmin_endpoint: "superadmin-corezoid-domain"
+
+capi_email_confirm: "false"
+companies_manager: corezoid_internal
+capi_check_api_info_group: 1
+
+capi_front_sender_editor_domain: "builder-dev.corezoid-domain"
+capi_front_sender_editor: "https://{{ capi_front_sender_editor_domain }}/embed.js?"
+
+nginx_ssl_dir: "/etc/nginx/ssl"
+nginx_ssl_content: "{{ corezoid_demo_pem }}"
+nginx_ssl_filename: "{{ nginx_ssl_dir }}/corezoid.pem"
+nginx_limit_req: "thousand"
+
+
+single_account_domain: "account-corezoid-domain"
+single_account_corezoid_sdk_login_id: 6
+single_account_corezoid_sdk_secret_key: "sdfsfsdfsdfsdfsdfsfsdf"
+single_account_client_id: "5ed76568ssdfsdfsdf"
+single_account_client_secret: "4eWKysdfsfsdfsdfs"
+single_account_config: "{{ conf_dir }}/single_account.config"
+single_admin_bearer_token_secret: "eWvVsdfsfsdfsdsdf"
+single_account_hosts:
+  - { host: "127.0.0.1" }
+
+capi_auth_single_account: "false"
+single_account_cookie_name: "account-corezoid-domain"
+
+capi_timer_min: 1
+
+capi_super_admin_id: 1
+capi_api_max_threads: 200
+capi_user_limits_max_interface_rate: 120
+capi_user_limits_max_user_rate: 2000
+capi_check_info_group_id: 6
+capi_service_desk_group_id: 83303
+capi_hosts:
+  - { host: "127.0.0.1" }
+
+capi_max_task_size_for_process_conv: "{{ worker_max_task_size }}"
+capi_max_task_size_for_st_diagramm_conv: "{{ worker_max_task_size_for_st_diagramm_conv }}"
+
+capi_api_secret: "{{ capi_api_secret_enc }}"
+capi_auth_hash: "{{ capi_auth_hash_enc }}"
+
+capi_sender: "on"
+capi_sender_build_form_url: "https://api-conv-dev.corezoid-domain"
+capi_sender_build_action_url: "https://api-adm-dev.corezoid-domain"
+capi_sender_call_action_url: "{{ capi_sender_build_form_url }}"
+capi_sender_secret: "{{ capi_sender_secret_enc }}"
+capi_sender_plugin_secret: "{{ capi_sender_plugin_secret }}"
+capi_sender_max_threads: 25
+capi_sender_env: "md"
+sender_ui: false
+
+capi_elasticsearch: true
+
+capi_oauth_pb: "false"
+capi_auth_ldap: "false"
+capi_auth_google: "false"
+capi_corezoid_auth: "true"
+capi_box_solution: "false"
+send_invite: "true"
+
+capi_ldap_host: "127.0.0.1"
+capi_ldap_port: "389"
+capi_ldap_tls: "false"
+capi_ldap_base: "o=my"
+capi_ldap_filter: "uid"
+capi_ldap_first_bind_user: "true"
+capi_ldap_bind_user_name_name: ""
+capi_ldap_bind_user_name: "{{ capi_ldap_filter }}={{ capi_ldap_bind_user_name_name }},{{ capi_ldap_base }}"
+capi_ldap_bind_user_pass: "123"
+capi_ldap_user_nick_entry: ""
+
+capi_oauth_pb_client_id: ""
+capi_oauth_pb_client_secure: ""
+
+capi_oauth_pb_return_url: ""
+capi_oauth_pb_oauth_url: ""
+capi_oauth_pb_token_url: ""
+capi_oauth_pb_userinfo_url: ""
+capi_oauth_pb_logout_url: ""
+capi_oauth_pb_isauthorize_url: ""
+###### Dbcall configure #####
+db_call: false
+db_callv2: false
+## db_call_url without endslash !!!
+db_call_url: "https://corezoid.loc"
+db_call_vhost: "/conveyor"
+db_call_host_rmq: rmq-corezoid.premiumbank.az
+###### Dbcall configure end #####
+###### Gitcall configure #####
+git_call: false
+git_call_vhost: "/conveyor"
+git_call_dunder_vhost: "/conveyor"
+git_call_dbname: "git_call"
+###### Gitcall configure end #####
+
+
+capi_front_settings:
+  ui:
+    - { market: "false", company: "true", bot_platform: "false", old_editor: "false", search: "true", billing: "false", default_company: "My Corezoid", disabled_auth_logo: "false", git_call: "false" }
+
+capi_front_captcha_key: ""
+capi_front_captcha_key_disabled: "true"
+capi_backend_settings_cpatcha_key: ""
+capi_backend_settings_cpatcha_disabled: "true"
+
+capi_telegram: true
+capi_telegram_url: "https://api.telegram.org/bot"
+capi_telegram_conv: 1331
+
+capi_validate_scheme_links: "false"
+
+capi_conv_logs: 84461
+
+capi_redis2_start_size: 10
+capi_redis2_min_size: 10
+capi_redis2_max_size: 100
+
+#-------------worker.config settings----------#
+worker_max_task_size: 3145728
+worker_max_task_size_for_process_conv: "{{ worker_max_task_size }}"
+worker_max_task_size_for_st_diagramm_conv: "{{ worker_max_task_size }}"
+worker_public_callback_prefix: "https://{{ capi_endpoint }}"
+pub_arc_pool_min: 20
+pub_arc_pool_max: "{{ pub_arc_pool_min }}"
+pub_arc_pool_start: "{{ pub_arc_pool_min }}"
+
+cons_copy_task_connections_per_queue: 1
+cons_copy_task_channels_per_connection: 1
+cons_copy_task_msg_prefetch_size: 50
+
+cons_timers_conn_per_queue: 1
+cons_timers_channels_per_connection: 1
+cons_timers_msg_prefetch_size: 50
+
+cons_http_connections_per_queue: 10
+cons_http_channels_per_connection: 5
+cons_http_msg_prefetch_size: 50
+
+cons_arc_conn_per_queue: 5
+cons_arc_channels_per_connection: 2
+cons_arc_msg_prefetch_size: 1000
+cons_arc_workers: 20
+
+pub_http_pool_min: 20
+pub_http_pool_max: "{{ pub_http_pool_min }}"
+pub_http_pool_start: "{{ pub_http_pool_min }}"
+
+pub_rpc_queues_count: 1
+
+cons_rpc_connections_per_queue: 5
+cons_rpc_channels_per_connection: 1
+cons_rpc_msg_prefetch_size: 50
+
+pub_cce_queues_count: 4
+pub_cce_pool_min: 30
+pub_cce_pool_max: "{{ pub_cce_pool_min }}"
+pub_cce_pool_start: "{{ pub_cce_pool_min }}"
+
+cons_cce_connections_per_queue: 5
+cons_cce_channels_per_connection: 2
+cons_cce_msg_prefetch_size: 50
+
+cons_get_task_connections_per_queue: 1
+cons_get_task_channels_per_connection: 1
+cons_get_task_msg_prefetch_size: 50
+
+cons_settings_connections_per_queue: 1
+cons_settings_channels_per_connection: 1
+cons_settings_msg_prefetch_size: 50
+
+pub_to_worker_pool_min: 5
+
+cons_shard_connections_per_queue: 10
+cons_shard_channels_per_connection: 5
+cons_shard_msg_prefetch_size: 50
+
+worker_hosts:
+  - { host: "" }
+worker_cluster_port: 5566
+
+plugins_unload_archive_task: false
+
+pg_conn_pool_start: 5
+pg_conn_pool_min: 5
+pg_conn_pool_max: 50
+
+pg_conn_pool_history_start: 2
+pg_conn_pool_history_min: 2
+pg_conn_pool_history_max: 50
+#-------------worker.config settings----------#
+
+#-------------enigma settings----------#
+
+enigma_is_enabled: "false"
+enigma_private_key_id: "d83d620c-677d-11ea-a39e-06f2c53ddb08"
+enigma_key_manager_host: "https://enigma.corezoid.com"
+
+enigma_client_cert: "{{ top_dir }}/certs/client.crt"
+enigma_client_key: "{{ top_dir }}/certs/client.key"
+enigma_ca_cert: "{{ top_dir }}/certs/ca.pem"
+#-------------enigma settings----------#
+
+
+#http-worker settings
+http_worker_max_http_resp_size: 5242880
+http_worker_max_keep_alive_connections_len: 0
+http_worker_pgsql_min_size: 0
+
+api_mult_nginx: true
+api_mult_version: "{{ corezoid_release_app_version.mult }}"
+api_mult_config: "{{ conf_dir }}/conveyor_api_multipart.config"
+api_mult_port: 9082
+api_mult_file_storage: "f3"
+api_mult_file_f3_path_to_dir: "/ebsmnt_share"
+api_mult_ttl_file: 60
+api_mult_cluster_port: 5567
+api_mult_login_id: 3
+api_mult_login_secret: "z2JUCu7j8LS7lKR3V0mYrtVuFcdzo3XSZgLVqjctCzlmqOoSOA"
+# mult_id: "{{ apps_id_sufix }}"
+
+mult_hosts:
+  - { host: "" }
+
+health_check_server_version: "1.0.5"
+health_check_server_config: "{{ conf_dir }}/health_check_server.config"
+hc_server_host: "127.0.0.1"
+hc_server_port: 5011
+hc_server_disabled: "true"
+hc_server_send_interval_sec: 30
+hcs_domain: "hcs.corezoid.loc"
+hcs_port: 9082
+
+erl_rpm: "erlang-{{ rmq_erl_version }}-1.el7.x86_64.rpm"
+
+app_erl_version: "erlang-{{ rmq_erl_version }}"
+
+rmq_version: "3.9.13"
+rmq_erl_version: "23.3.4.11"
+rmq_vhost: "/conveyor"
+
+rmq_rpm: "rabbitmq-server-{{ rmq_version }}"
+
+rmq_host: "127.0.0.1"
+rmq_port: 5672
+rmq_user: "app-user"
+rmq_user_pass: "{{ rmq_app_user_pass_enc }}"
+rmq_admin_pass: "{{ rmq_admin_pass_enc }}"
+
+redis_version: "7.0.12"
+
+redis_counters_host: "127.0.0.1"
+redis_counter_name: "redis-counters"
+redis_counter_port: 6379
+redis_counters_db: 0
+redis_api_sum_db: 1
+redis_users_db: 12
+redis_counter_dir: "{{ top_dir }}/{{ redis_counter_name }}"
+redis_counter_conf: "/etc/{{ redis_counter_name }}.conf"
+
+redis_cache_host: "{{ redis_counters_host }}"
+redis_cache_name: "redis-cache"
+redis_cache_port: 6380
+redis_cache_db: 2
+redis_cache_dir: "{{ top_dir }}/{{ redis_cache_name }}"
+redis_cache_conf: "/etc/{{ redis_cache_name }}.conf"
+
+redis_timers_host: "{{ redis_cache_host }}"
+redis_timers_name: "redis-timers"
+redis_timers_port: 6381
+redis_timers_db: 3
+redis_timers_dir: "{{ top_dir }}/{{ redis_timers_name }}"
+redis_timers_conf: "/etc/{{ redis_timers_name }}.conf"
+
+redis_single_account_db: 5
+
+db_version: "13"
+db_ver: "13"
+
+pgbouncer:
+  port: 5432
+
+db_huge_pages: false
+
+db_superuser_login: "postgres"
+db_superuser_password: "{{ db_superuser_password_enc }}"
+db_port: 5433
+db_viewers:
+  - ""
+
+db_main:
+  host: "127.0.0.1"
+  port: "{{ db_port }}"
+  user: "internal_user"
+  pass: "{{ db_app_user_pass_enc }}"
+
+db_app_user: "{{ db_main.user }}"
+db_fdw_user: "fdw_user"
+
+
+
+rmq:
+  - { host: "{{ rmq_host }}", port: "{{ rmq_port }}", user: "{{ rmq_user }}", pass: "{{ rmq_app_user_pass_enc }}", vhost: "{{ rmq_vhost }}", shards: "{{ real_db_numbers }}", dns_cache_name: "name1" }
+
+rmq_http:
+  - { host: "{{ rmq_host }}", port: "{{ rmq_port }}", user: "{{ rmq_user }}", pass: "{{ rmq_app_user_pass_enc }}", vhost: "{{ rmq_vhost }}", dns_cache_name: "name5" }
+
+rmq_core:
+  - { host: "{{ rmq_host }}", port: "{{ rmq_port }}", user: "{{ rmq_user }}", pass: "{{ rmq_app_user_pass_enc }}", vhost: "{{ rmq_vhost }}", shards: "{{ real_db_numbers }}", dns_cache_name: "name1" }
+
+db_shards:
+  - { host: "{{ db_main.host }}", user: "{{ db_main.user }}", pass: "{{ db_app_user_pass_enc }}", shards: "{{ real_db_numbers }}" }
+
+db_archive_shards:
+  - { host: "{{ db_main.host }}", user: "{{ db_main.user }}", pass: "{{ db_app_user_pass_enc }}", shards: "{{ real_db_numbers }}" }
+
+redis_counters:
+  - { host: "{{ redis_counters_host }}", port: "{{ redis_counter_port }}", password: "", db: "{{ redis_counters_db }}" }
+
+redis_api_sum:
+  - { host: "{{ redis_counters_host }}", port: "{{ redis_counter_port }}", password: "", db: "{{ redis_api_sum_db }}" }
+
+redis_users:
+  - { host: "{{ redis_counters_host }}", port: "{{ redis_counter_port }}", password: "", db: "{{ redis_users_db }}" }
+
+redis_cache:
+  - { host: "{{ redis_cache_host }}", port: "{{ redis_cache_port }}", password: "", db: "{{ redis_cache_db }}" }
+
+redis_timers:
+  - { host: "{{ redis_timers_host }}", port: "{{ redis_timers_port }}", password: "", db: "{{ redis_timers_db }}" }
+
+elasticsearch:
+  version: "8.13"
+  es_mastername: "127.0.0.1"
+  es_main_dir: "elasticsearch"
+  es_dir_owner: "elasticsearch"
+  es_cluster_list: "127.0.0.1"
+
+capi_es_host: "{{ elasticsearch.es_mastername }}"
+
+db_monitoring_user: zabbix
+
+elasticsearch_logs:
+  es_mastername: "127.0.0.1"
+  es_main_dir: "elasticsearch"
+  es_dir_owner: "elasticsearch"
+  es_port: 8100
+  binlogs_index_name: "binlog"
+
+rmq_logs: false
+rmq_logs_host: "127.0.0.1"
+rmq_logs_port: "{{ rmq_port }}"
+rmq_logs_vhost: "/worker-http"
+rmq_logs_exchange: "binlogs"
+rmq_logs_queues_name: "httplog_prod_"
+rmq_logs_username: "conveyor-producer"
+rmq_logs_password: "scsdccd"
+rmq_logs_queues_count: 2
+rmq_logs_queues_numbers: [1, 2]
+rmq_logs_thread_count: 10
+
+zabbix_server:
+  domain: "127.0.0.1"
+  port: 10050
