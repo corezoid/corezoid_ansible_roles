@@ -938,7 +938,7 @@
           {host, "{{ rmq_http[0].host }}"},
           {port, {{ rmq_http[0].port }}},
           {username, <<"{{ rmq_http[0].user }}">>},
-          {password, <<<"{{ rmq_http[0].pass }}">>},
+          {password, <<"{{ rmq_http[0].pass }}">>},
           {vhost, <<"{{ rmq_vhost }}">>}
         ]]},
       {queues_count, 1},
@@ -953,7 +953,7 @@
           {host, "{{ rmq_http[0].host }}"},
           {port, {{ rmq_http[0].port }}},
           {username, <<"{{ rmq_http[0].user }}">>},
-          {password, <<<"{{ rmq_http[0].pass }}">>},
+          {password, <<"{{ rmq_http[0].pass }}">>},
           {vhost, <<"{{ rmq_vhost }}">>}
         ]]},
         {queues_count, 1},
