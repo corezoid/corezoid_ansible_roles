@@ -1,0 +1,153 @@
+---
+- name: Create general roles
+  postgresql_user: >
+    login_host={{ db_main.host }}
+    port={{ db_main.port }}
+    login_user={{ db_superuser_login }}
+    login_password={{ db_superuser_password }}
+    db=postgres
+    password=""
+    name={{ item.name }}
+    role_attr_flags={{ item.role_attr }}
+  with_items:
+    - { name: "viewers", role_attr: "NOLOGIN" }
+    - { name: "appusers", role_attr: "NOLOGIN" }
+  tags:
+    - rds-all
+    - rds-create-roles
+
+- name: Write internal_user password to temporary file
+  copy:
+    content: "{{ db_app_user_pass }}internal_user"
+    dest: /tmp/internal_user.txt
+
+- name: Write fdw_user password to temporary file
+  copy:
+    content: "{{ db_fdw_user_pass }}fdw_user"
+    dest: /tmp/fdw_user.txt
+
+- name: Write monitoring_user password to temporary file
+  copy:
+    content: "{{ db_monitoring_user_password }}zabbix"
+    dest: /tmp/monitoring_user.txt
+
+
+- name: Hash password for internal_user from file
+  shell: cat /tmp/internal_user.txt | md5sum | awk '{print "md5" $1}'
+  register: internal_user_hash
+
+- name: Hash password for fdw_user from file
+  shell: cat /tmp/fdw_user.txt | md5sum | awk '{print "md5" $1}'
+  register: fdw_user_hash
+
+- name: Hash password for internal_user from file
+  shell: cat /tmp/monitoring_user.txt | md5sum | awk '{print "md5" $1}'
+  register: monitoring_user_hash
+
+- name: create app user
+  postgresql_user: >
+    login_host={{ db_main.host }}
+    port={{ db_main.port  }}
+    db=postgres
+    name={{ item.name }}
+    password={{ item.password }}
+    login_user={{ db_superuser_login }}
+    login_password={{ db_superuser_password }}
+    encrypted=yes
+  with_items:
+    - { name: "{{ db_app_user }}", password: "{{ internal_user_hash.stdout }}" }
+    - { name: "{{ db_fdw_user }}", password: "{{ fdw_user_hash.stdout }}" }
+    - { name: "{{ db_monitoring_user }}", password: "{{ monitoring_user_hash.stdout }}" }
+  tags:
+    - rds-all
+    - rds-create-app-user
+
+- name: Remove temporary internal_user file
+  ansible.builtin.file:
+    path: /tmp/{{ item.name }}.txt
+    state: absent
+  with_items:
+    - { name: "internal_user" }
+    - { name: "fdw_user" }
+    - { name: "monitoring_user" }
+
+- name: grant role to app user
+  postgresql_privs: >
+    login_host={{ db_main.host }}
+    port={{ db_main.port  }}
+    db=postgres
+    type=group
+    objs=appusers
+    roles={{ item.name }}
+    grant_option=no
+    login_user={{ db_superuser_login }}
+    login_password={{ db_superuser_password }}
+  with_items:
+    - { name: "{{ db_app_user }}" }
+    - { name: "{{ db_fdw_user }}" }
+  tags:
+    - rds-all
+    - rds-grant-role-to-app-user
+
+- name: Create main dbs
+  postgresql_db: >
+    name={{ item }}
+    login_host={{ db_main.host }}
+    port={{ db_main.port }}
+    login_user={{ db_superuser_login }}
+    login_password={{ db_superuser_password }}
+  with_items:
+    - conveyor
+    - cce
+    - health_check
+    - conveyor_statistics
+    - settings
+    - limits
+    - git_call
+  tags:
+    - rds-all
+    - rds-create-main-dbs
+
+- name: Create shards db
+  postgresql_db: >
+    name=cp{{ item }}
+    login_host={{ db_main.host }}
+    port={{ db_main.port }}
+    login_user={{ db_superuser_login }}
+    login_password={{ db_superuser_password }}
+  with_items: '{{ real_db_numbers }}'
+  tags:
+    - rds-all
+    - rds-create-shard-dbs
+
+- name: Deploy db schema for main db
+  include: create_db_from_schema_main.yml local_db={{ outer_item }}
+  with_items:
+    - conveyor
+    - cce
+    - health_check
+    - conveyor_statistics
+    - settings
+    - limits
+  loop_control:
+    loop_var: outer_item
+  async: 60
+  poll: 6
+  tags:
+    - rds-all
+    - rds-deploy-main-schema
+
+
+- name: Deploy db schema for shards db
+  include: create_db_from_schema_cp.yml local_db=cp{{ outer_item }}
+  with_items: '{{ real_db_numbers }}'
+  loop_control:
+    loop_var: outer_item
+  async: 60
+  poll: "{{ real_db_numbers }}"
+  tags:
+    - rds-all
+    - rds-deploy-shards-schema
+
+
+

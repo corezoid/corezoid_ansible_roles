@@ -1,0 +1,99 @@
+- name: set name for the shard's sql file
+  set_fact:
+    local_db_schema: "{{ schema_path }}/{{ schema_path_suffix }}/{{ corezoid_release }}/init/cp.sql"
+    remote_db_schema: "/tmp/cp.sql"
+  when: local_db | regex_replace('[0-9]+$', '') == 'cp'
+  tags:
+    - debug-tunnel-var
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: set schema name for ssh_tunnel
+  set_fact:
+    db_schema: "{{ local_db_schema }}"
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- debug: msg={{ db_schema }}
+
+- name: ensure tables exist in {{ local_db }}
+  shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_shards_rds.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "SELECT COUNT(1) FROM pg_stat_user_tables"
+  register: check_db_tables
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: deploy db schema for {{ local_db }}
+  shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_shards_rds.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -f {{ db_schema }}
+  when:
+    - check_db_tables.stdout == "0"
+    - check_db_tables.rc == 0
+  register: result
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: grant privileges on all tables in {{ local_db }}
+  postgresql_privs: >
+    db={{ local_db }}
+    privs={{ item.privs }}
+    objs=ALL_IN_SCHEMA
+    schema=public
+    type={{ item.obj_type }}
+    role={{ item.name }}
+    host={{ db_shards_rds.host }}
+    login_user={{ db_superuser_login }}
+    login_password={{ db_superuser_password }}
+    port={{ db_main.port }}
+    grant_option=no
+  with_items:
+    - { name: "appusers", obj_type: "table", privs: "SELECT,INSERT,UPDATE,DELETE" }
+    - { name: "appusers", obj_type: "sequence", privs: "SELECT,UPDATE" }
+    - { name: "viewers", obj_type: "table", privs: "SELECT" }
+    - { name: "viewers", obj_type: "sequence", privs: "SELECT" }
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: create extension postgres_fdw
+  shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_shards_rds.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "CREATE extension IF NOT EXISTS postgres_fdw;"
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: create extension pgcrypto
+  shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_shards_rds.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "CREATE EXTENSION IF NOT EXISTS pgcrypto; with q As (select id, count(*) over (partition by conveyor_id, uuid) as c from nodes), q1 AS( select * from q WHERE c>1) UPDATE nodes SET uuid = gen_random_uuid() FROM q1 WHERE nodes.id = q1.id; with q As (select id, count(*) over (partition by dashboard_id, uuid) as c from charts), q1 AS (select * from q WHERE c>1) UPDATE charts SET uuid = gen_random_uuid() FROM q1 WHERE charts.id = q1.id;"
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: GRANT postgres_fdw
+  shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_shards_rds.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO {{ db_main.user }}"
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: GRANT postgres_fdw appusers {{ local_db }}
+  shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_shards_rds.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "GRANT USAGE ON FOREIGN DATA WRAPPER postgres_fdw TO appusers"
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: GRANT ALL PRIVILEGES appusers {{ local_db }}
+  shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_shards_rds.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "GRANT ALL PRIVILEGES ON SCHEMA public TO appusers;"
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: GRANT ALL TABLES appusers {{ local_db }}
+  shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_shards_rds.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO appusers;"
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
+
+- name: GRANT ALL SEQUENCES appusers {{ local_db }}
+  shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_shards_rds.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "GRANT SELECT,UPDATE ON ALL SEQUENCES IN SCHEMA public TO appusers;"
+  tags:
+    - pgsql-all
+    - pgsql-deploy-schema
