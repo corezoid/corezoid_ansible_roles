@@ -39,7 +39,7 @@ corezoid_release_app_version:
   sync_api: "3.6.1"
 
 # license_server
-licence_db_enabled: "false" # поставить тру если есть в базе
+licence_db_enabled: "true" 
 license_as_file: "true"
 license_file_path: "{{ top_dir }}/certs"
 license_file_name: "corezoid"
@@ -85,7 +85,7 @@ usercode:
 
 corezoid_api_sync:
   config: "{{ conf_dir }}/corezoid_api_sync.config"
-  domain: "syncapi-domain"
+  domain: "syncapi.example.com"
   app_port: 8092
   api_user_id: 3
   api_user_secret: sfsfsdfs9dfsdfsdfsdfssdfs"
@@ -98,14 +98,14 @@ corezoid_api_sync_nginx:
 
 merchant_api: false
 
-capi_endpoint: "corezoid-domain"
-capi_cookie_name: "corezoid-domain"
+capi_endpoint: "corezoid.example.com"
+capi_cookie_name: "corezoid.example.com"
 capi_main_domain: "{{ capi_endpoint }}"
 
 capi_admin_url1: "{{ capi_endpoint }}"
 capi_admin_url2: "{{ capi_admin_url1 }}"
 
-superadmin_endpoint: "superadmin-corezoid-domain"
+superadmin_endpoint: "superadmin-corezoid.example.com"
 
 capi_email_confirm: "false"
 companies_manager: corezoid_internal
@@ -120,7 +120,7 @@ nginx_ssl_filename: "{{ nginx_ssl_dir }}/corezoid.pem"
 nginx_limit_req: "thousand"
 
 
-single_account_domain: "account-corezoid-domain"
+single_account_domain: "account.example.com" # default account off 
 single_account_corezoid_sdk_login_id: 6
 single_account_corezoid_sdk_secret_key: "sdfsfsdfsdfsdfsdfsfsdf"
 single_account_client_id: "5ed76568ssdfsdfsdf"
@@ -131,7 +131,7 @@ single_account_hosts:
   - { host: "127.0.0.1" }
 
 capi_auth_single_account: "false"
-single_account_cookie_name: "account-corezoid-domain"
+single_account_cookie_name: "account.example.com""
 
 capi_timer_min: 1
 
