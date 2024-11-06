@@ -42,7 +42,7 @@ corezoid_release_app_version:
 licence_db_enabled: "false" # поставить тру если есть в базе
 license_as_file: "true"
 license_file_path: "{{ top_dir }}/certs"
-license_file_name: "licence"
+license_file_name: "corezoid"
 
 ls_local_filedir: "files"
 
