@@ -24,19 +24,19 @@ zabbix_host: "127.0.0.1"
 zabbix_disabled: "true"
 prometheus_metrics: "false"
 
-corezoid_release: 6.5.5
+corezoid_release: 6.6.0
 
 corezoid_release_app_version:
-  capi: "8.3.9.1"
-  conf_agent_server: "2.6.1"
-  conf-agent-client: "2.6.1"
-  corezoid_limits: "2.4.1"
-  corezoid_web_admin: "6.5.5"
-  http_worker: "4.1.5.1"
-  worker: "5.1.6.1"
+  capi: "8.4.0.3"
+  conf_agent_server: "2.7.1"
+  conf-agent-client: "2.6.2"
+  corezoid_limits: "2.5.1"
+  corezoid_web_admin: "6.6.0"
+  http_worker: "4.2.0.1"
+  worker: "5.2.0.1"
   usercode: "9.0.1"
-  mult: "3.2.7.1"
-  sync_api: "3.5.1"
+  mult: "3.3.0.1"
+  sync_api: "3.6.1"
 
 # license_server
 licence_db_enabled: "false" # поставить тру если есть в базе
