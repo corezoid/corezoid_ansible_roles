@@ -1,5 +1,4 @@
 #!/bin/bash
-
 yum -y update
 rm -rf /tmp/* /var/tmp/*
 history -c
