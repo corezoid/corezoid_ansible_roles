@@ -21,6 +21,13 @@
 
 - name: Set Distribution Version
   set_fact:
+    distr_version: 9
+  when: (ansible_distribution == "CentOS" or ansible_distribution == "OracleLinux")and ansible_distribution_major_version == "9"
+  tags:
+    - yum-middleware-system-repo-install
+
+- name: Set Distribution Version
+  set_fact:
     distr_version: 7
   when:
     - ansible_distribution == "Amazon"

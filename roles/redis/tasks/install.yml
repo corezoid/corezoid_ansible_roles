@@ -40,25 +40,25 @@
 ##=======================Временное решение для Centos 9 до того как закинут пакет в репо =====================##
 - name: Copy redis Packages for Centos 9
   copy:
-    src: "files/redis-7.0.12-1.el9.remi.x86_64.rpm"
-    dest: /tmp/redis-7.0.12-1.el9.remi.x86_64.rpm
+    src: "files/redis-7.2.4-1.el9.remi.x86_64.rpm"
+    dest: /tmp/redis-7.2.4-1.el9.remi.x86_64.rpm
     owner: root
     group: root
     mode: '0644'
   when:
     - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-    - redis_version == "7.0.12"
+    - redis_version == "7.2.4"
     - ansible_distribution_major_version == "9"
   tags:
     - redis-all
     - redis-install
 
 - name: Install redis Packages for  Centos 9
-  command: yum install /tmp/redis-7.0.12-1.el9.remi.x86_64.rpm -y
+  command: yum install /tmp/redis-7.2.4-1.el9.remi.x86_64.rpm -y
   ignore_errors: true
   when:
     - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-    - redis_version == "7.0.12"
+    - redis_version == "7.2.4"
     - ansible_distribution_major_version == "9"
   tags:
     - redis-all
@@ -66,11 +66,11 @@
 
 - name: Remove redis Packages for Centos 9
   file:
-    path: "tmp/redis-7.0.12-1.el9.remi.x86_64.rpm"
+    path: "tmp/redis-7.2.4-1.el9.remi.x86_64.rpm"
     state: absent
   when:
     - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-    - redis_version == "7.0.12"
+    - redis_version == "7.2.4"
     - ansible_distribution_major_version == "9"
   tags:
     - redis-all
