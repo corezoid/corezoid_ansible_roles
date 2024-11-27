@@ -203,6 +203,18 @@
     - pgsql-all
     - pgsql-create-main-dbs
 
+- name: Change owner accounts database
+  postgresql_db: >
+    name={{ item }}
+    login_host={{ db_main.host }}
+    port={{ db_main.port }}
+    owner={{ db_main.user }}
+  with_items:
+    - accounts
+  tags:
+    - pgsql-all
+    - pgsql-create-main-dbs
+
 - name: Create shards db
   postgresql_db: >
     name=cp{{ item }}
@@ -222,7 +234,6 @@
     - conveyor_statistics
     - git_call
     - settings
-    - accounts
     - limits
   loop_control:
     loop_var: outer_item
