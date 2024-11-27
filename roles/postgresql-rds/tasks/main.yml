@@ -104,6 +104,21 @@
     - settings
     - limits
     - git_call
+    - accounts
+  tags:
+    - rds-all
+    - rds-create-main-dbs
+
+- name: Change owner accounts database
+  postgresql_db: >
+    name={{ item }}
+    login_host={{ db_main.host }}
+    port={{ db_main.port }}
+    login_user={{ db_superuser_login }}
+    login_password={{ db_superuser_password }}
+    owner={{ db_main.user }}
+  with_items:
+    - accounts
   tags:
     - rds-all
     - rds-create-main-dbs
