@@ -1,36 +1,47 @@
 ---
 
+# Create the main directory for shared content storage
+# This task ensures the existence of a directory for shared content with proper ownership and permissions
 - name: Make folder for shared content
   file: path={{ api_mult_file_f3_path_to_dir }} owner={{ app_user }} group={{ app_user }} state=directory mode=0755 recurse=yes
   tags:
     - api-multipart-all
     - api-multipart-env
 
+# Create a versions subdirectory for storing different versions of content
+# This directory will be used to maintain different versions of the shared content
 - name: Make folder for versions
   file: path={{ api_mult_file_f3_path_to_dir }}/versions owner={{ app_user }} group={{ app_user }} state=directory mode=0755 recurse=yes
   tags:
     - api-multipart-all
     - api-multipart-env
     -
-# - name: Mount EFS share
-#   mount:
-#     path: "{{ api_mult_file_f3_path_to_dir }}"
-#     src: "{{ efs_dns_name }}:/"
-#     fstype: nfs4
-#     opts: nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2
-#     state: mounted
-#   tags:
-#     - api-multipart-all
-#     - api-multipart-env
 
+      # EFS mount configuration (currently disabled)
+      # Configures NFS4 mounting of EFS storage with optimized performance parameters
+      # - name: Mount EFS share
+      #   mount:
+      #     path: "{{ api_mult_file_f3_path_to_dir }}"
+      #     src: "{{ efs_dns_name }}:/"
+      #     fstype: nfs4
+      #     opts: nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2
+      #     state: mounted
+      #   tags:
+      #     - api-multipart-all
+      #     - api-multipart-env
+
+      # Clean YUM cache to ensure fresh package metadata
+    # This task removes all cached package data to prevent installation issues
 - name: Yum clean all
   command: yum clean all
-#  args:
-#    warn: false
+  #  args:
+  #    warn: false
   tags:
     - api-multipart-all
     - api-multipart-install
 
+# Install the conveyor_api_multipart application package
+# This task installs or updates the application from the AWS Corezoid repository
 - name: Install conveyor_api_multipart app
   yum:
     name: "conveyor_api_multipart-{{ corezoid_release_app_version.mult }}"
@@ -42,6 +53,8 @@
     - api-multipart-all
     - api-multipart-install
 
+# Create temporary directory for application operations
+# Sets up a temporary directory with proper ownership for runtime operations
 - name: Create Mult tmp_dir
   file: path={{ mult_tmp_dir }} owner={{ app_user }} group={{ app_user }} state=directory
   with_items:
@@ -50,6 +63,8 @@
     - api-multipart-all
     - api-multipart-install
 
+# Create log directory for application logging
+# Establishes a dedicated directory for application logs with appropriate permissions
 - name: Add log directory
   file: path={{ top_dir }}/erlang/{{ item }}/log owner={{ app_user }} group={{ app_user }} state=directory
   with_items:
@@ -58,6 +73,8 @@
     - api-multipart-all
     - api-multipart-install
 
+# Set secure permissions for the application directory
+# Ensures the application directory has restricted access for security
 - name: Fix permission for conveyor_api_multipart
   file: path={{ top_dir }}/erlang/{{ item }} owner={{ app_user }} group={{ app_user }} state=directory mode=0700 recurse=yes
   with_items:
@@ -66,12 +83,16 @@
     - api-multipart-all
     - api-multipart-install
 
+# Create configuration directory
+# Sets up a directory for storing application configuration files
 - name: Make config folder
   file: path={{ conf_dir }} owner=root group=root state=directory mode=0755
   tags:
     - api-multipart-all
     - api-multipart-config
 
+# Generate application configuration from template
+# Creates the main configuration file using provided template
 - name: Create conveyor_api_multipart_config
   template: src=templates/{{ corezoid_release }}-{{ item }}.config.j2 dest={{ api_mult_config }}
   with_items:
@@ -81,6 +102,8 @@
     - api-multipart-config
     - api-multipart-config-file
 
+# Set secure permissions for configuration file
+# Restricts access to the configuration file for security
 - name: Fix permission to conveyor_api_multipart.config file
   file: state=file path={{ api_mult_config }} owner={{ app_user }} group={{ app_user }} mode=0500
   with_items:
@@ -91,6 +114,8 @@
     - api-multipart-config
     - api-multipart-config-file
 
+# Create systemd service configuration
+# Sets up the systemd service for automatic application management
 - name: Create conveyor_api_multipart systemd
   template: src=templates/{{ item }}.service.j2 dest=/etc/systemd/system/{{ item }}.service owner=root group=root mode=0644
   with_items:
@@ -103,6 +128,8 @@
     - ansible_os_family == "RedHat" or ansible_os_family == "CentOS"
     - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
+# Check existence of systemd service directory
+# Verifies if the systemd service configuration directory exists
 - name: check conveyor_api_multipart.service.d folder
   stat:
     path: "/etc/systemd/system/conveyor_api_multipart.service.d"
@@ -112,6 +139,8 @@
     - api-multipart-app
     - api-multipart-systemd
 
+# Configure systemd service directory and reload daemon
+# Creates necessary systemd directories and refreshes systemd configuration
 - name: Setup app systemd
   block:
     - name: Make folder for static content
@@ -135,7 +164,8 @@
     - api-multipart-app
     - api-multipart-systemd
 
-
+# Verify systemd service directory status
+# Double-checks the systemd service directory configuration
 - name: check conveyor_api_multipart.service.d folder
   stat:
     path: "/etc/systemd/system/conveyor_api_multipart.service.d"
@@ -145,7 +175,8 @@
     - api-multipart-app
     - api-multipart-systemd
 
-
+# Install systemd service limits and reload configuration
+# Sets up resource limits for the service and refreshes systemd
 - name: Setup app systemd
   block:
     - name: Install limits file
@@ -163,6 +194,8 @@
     - api-multipart-app
     - api-multipart-systemd
 
+# Enable and start application service
+# Ensures the service starts automatically on boot and is running
 - name: Enable conveyor_api_multipart to survive reboot
   service:
     name: "{{ item }}"
@@ -176,6 +209,8 @@
     - api-multipart-initd
     - api-multipart-initd-start
 
+# Configure cron job for mult_id rotation
+# Sets up automatic rotation of mult_id for security purposes
 - name: Change mult_id in config
   cron:
     special_time: reboot
@@ -188,6 +223,8 @@
     - capi-app
     - capi-cron
 
+# Create Monit monitoring configuration
+# Sets up monitoring for the application using Monit
 - name: Create monit file
   template:
     src: "templates/{{ item }}.monit.j2"
@@ -202,6 +239,8 @@
     - api-multipart-all
     - api-multipart-monit
 
+# Reload Monit configuration if changed
+# Ensures monitoring configuration changes take effect
 - name: Reload monit if config file changed
   service:
     name: monit
