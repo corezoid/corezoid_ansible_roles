@@ -1,5 +1,0 @@
-check process {{ item }} with pidfile /var/run/{{ item }}/{{ item }}
-   group web
-   start program = "/sbin/service {{ item }} start" with timeout 15 seconds
-   stop  program = "/sbin/service {{ item }} stop"
-   if 5 restarts within 5 cycles then timeout

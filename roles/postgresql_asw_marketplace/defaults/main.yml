@@ -1,7 +1,0 @@
----
-# defaults file for postgresql
-
-schema_path: "{{ inventory_dir }}"
-schema_path_suffix: "roles/postgresql/files"
-
-pgbouncer_version: "1.15.0"

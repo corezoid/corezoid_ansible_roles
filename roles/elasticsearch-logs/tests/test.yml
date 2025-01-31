@@ -1,5 +1,0 @@
----
-- hosts: elasticsearch-logs
-  remote_user: root
-  roles:
-    - elasticsearch-logs

@@ -1,5 +1,0 @@
-127.0.0.1 localhost
-
-{% for host in groups['mongod_servers'] %}
-{{ hostvars[host].mongod_host }}  {{ host }}
-{% endfor %}

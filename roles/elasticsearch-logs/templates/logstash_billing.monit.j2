@@ -1,5 +1,0 @@
-check process {{ item }} with pidfile /var/run/{{ item }}.pid
-   group web
-   start program = "/etc/init.d/{{ item }} start" with timeout 30 seconds
-   stop  program = "/etc/init.d/{{ item }} stop"
-   if 5 restarts within 5 cycles then timeout

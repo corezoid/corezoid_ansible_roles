@@ -1,4 +1,0 @@
----
-# defaults file for capi
-gitcall_js_code_hub_service_port: 5902
-gitcall_git_code_hub_service_port: 5901

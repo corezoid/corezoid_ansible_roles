@@ -1,1 +1,0 @@
-for db in $(psql -d postgres -p 5433 -t -c "SELECT datname FROM pg_database;" | grep cp[0-9]*); do psql -p 5433 -d ${db} -Atc "TRUNCATE TABLE tasks_history; alter table tasks_history alter create_time type bigint;"; done

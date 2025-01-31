@@ -1,3 +1,0 @@
----
-# vars file for postgresql
-ssh_tunnel: false

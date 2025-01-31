@@ -1,1 +1,0 @@
-for db in $(psql -d postgres -p 5433 -t -c "SELECT datname FROM pg_database;" | grep cp[0-9]*); do psql -p 5433 -d ${db} -Atc "alter table nodes add column options text; alter table nodes add column options_temp text; alter table node_commits_history add column options text;"; done

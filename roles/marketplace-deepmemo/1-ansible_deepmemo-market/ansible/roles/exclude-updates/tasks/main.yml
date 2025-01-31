@@ -1,7 +1,0 @@
----
-# tasks file for prolog-openapi
-- name: line insert
-  lineinfile:
-    path: /etc/yum.conf
-    line: 'exclude=eprolog, prolog-openapi'
-    insertbefore: EOF
