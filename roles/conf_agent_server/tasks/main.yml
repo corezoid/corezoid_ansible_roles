@@ -1,12 +1,16 @@
+# Clean YUM cache to ensure fresh package metadata
+# Removes all cached package data to prevent installation issues
 - name: Yum clean all
   command: yum clean all
-#  args:
-#    warn: false
+  #  args:
+  #    warn: false
   tags:
     - conf_agent_server-all
     - conf_agent_server-app
     - conf_agent_server-install
 
+# Install Configuration Agent Server package
+# Installs or updates the conf_agent_server package from AWS Corezoid repository with specific version
 - name: Install package conf_agent_server
   yum:
     name: "{{ item }}"
@@ -21,6 +25,8 @@
     - conf_agent_server-app
     - conf_agent_server-install
 
+# Create log directory for Configuration Agent Server
+# Sets up a secure directory for application logs with restricted permissions
 - name: add log directory
   file: path={{ top_dir }}/erlang/{{ item }}/log owner={{ app_user }} group={{ app_user }} state=directory mode=0700
   with_items:
@@ -30,6 +36,8 @@
     - conf_agent_server-app
     - conf_agent_server-install
 
+# Set secure permissions for application directory
+# Ensures all Configuration Agent Server files have proper ownership and restricted access
 - name: fix permission
   file:
     path: "{{ top_dir }}/erlang/{{ item }}"
@@ -45,6 +53,8 @@
     - conf_agent_server-app
     - conf_agent_server-install
 
+# Generate Configuration Agent Server config file
+# Creates the application configuration file from template with proper settings
 - name: Create conf_agent_server config file
   template:
     src: "templates/{{ corezoid_release }}-{{ item }}.config.j2"
@@ -56,6 +66,8 @@
     - conf_agent_server-app
     - conf_agent_server-config-file
 
+# Set secure permissions for configuration file
+# Restricts access to the configuration file for security on non-localhost systems
 - name: Fix permission to conf_agent_server.config file
   file: state=file path={{ conf_agent_server_config }} owner={{ app_user }} group={{ app_user }} mode=0500
   with_items:
@@ -66,6 +78,8 @@
     - conf_agent_server-app
     - conf_agent_server-config-file
 
+# Configure systemd service
+# Sets up systemd service configuration for automatic process management
 - name: Setup app systemd
   template: src=templates/{{ item }}.service.j2 dest=/etc/systemd/system/{{ item }}.service owner=root group=root mode=0644
   with_items:
@@ -78,6 +92,8 @@
     - ansible_os_family == "RedHat" or ansible_os_family == "CentOS"
     - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
+# Enable and start Configuration Agent Server service
+# Ensures the service starts automatically on boot and is running
 - name: Enable conf_agent_server to survive reboot
   service:
     name: "{{ item }}"
@@ -92,6 +108,8 @@
     - conf_agent_server-initd
     - conf_agent_server-initd-start
 
+# Create Monit monitoring configuration
+# Sets up monitoring for the Configuration Agent Server service
 - name: Create monit file
   template: src=templates/{{ item }}.monit.j2 dest=/etc/monit.d/{{ item }} owner=root group=root mode=0600
   with_items:
@@ -102,6 +120,8 @@
     - conf_agent_server-app
     - conf_agent_server-monit
 
+# Reload Monit configuration
+# Applies any changes to the Monit monitoring setup if configuration was modified
 - name: Reload monit if config file changed
   service:
     name: monit

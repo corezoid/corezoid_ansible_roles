@@ -1,3 +1,5 @@
+# Create secure directory for license certificates
+# Establishes a dedicated directory for storing license files with appropriate permissions
 - name: Make certs folder
   file: path={{ license_file_path }} owner="{{ app_user }}" group="{{ app_user }}" state=directory mode=0755
   when: license_as_file
@@ -5,6 +7,8 @@
     - license-server-all
     - license-server-config
 
+# Deploy Corezoid 5.x license file
+# Copies the license file from local source to target server with proper ownership and permissions
 - name: Upload license for Corezoid 5.x
   copy:
     src: "{{ ls_local_filedir }}/{{ item }}"
@@ -18,11 +22,3 @@
   tags:
     - license-server-all
     - license-server-upload-files
-
-
-# - name: Add old license
-#   include: license_old.yml
-#   when: not license_as_file
-#   tags:
-#      - license-server-all
-#      - license-server-old

@@ -1,14 +1,17 @@
 ---
 # tasks file for usercode
 -
+  # Clean YUM cache to ensure fresh package metadata
+# Removes all cached package data to prevent installation issues
 - name: Yum clean all
   command: yum clean all
-#  args:
-#    warn: false
+  #  args:
+  #    warn: false
   tags:
     - usercode-all
     - usercode-install
-# old usercode
+
+# Legacy GCC configuration (commented)
 #=============================================
 #- name: Add gcc.repo
 #  template:
@@ -29,6 +32,9 @@
 #    - usercode-all
 #    - usercode-install
 #=============================================
+
+# Install Usercode package
+# Installs or updates the usercode package from AWS Corezoid repository
 - name: Install packages
   yum:
     name: "{{ item }}"
@@ -39,17 +45,21 @@
     disable_gpg_check: yes
   with_items:
     - "usercode-{{ usercode.version }}"
-#    - "gcc-libs-0.0.3"
+  #    - "gcc-libs-0.0.3"
   tags:
     - usercode-all
     - usercode-install
 
+# Create configuration directory
+# Sets up a directory for storing application configuration files
 - name: Make config folder
   file: path={{ conf_dir }} owner=root group=root state=directory mode=0755
   tags:
     - usercode-all
     - usercode-config
 
+# Generate Usercode configuration
+# Creates the main configuration file from template
 - name: Create app configs
   template:
     src: "templates/{{ corezoid_release }}-usercode.config.j2"
@@ -59,6 +69,8 @@
     - usercode-config
     - usercode-config-file
 
+# Set secure permissions for configuration file
+# Restricts access to the configuration file for security on non-localhost systems
 - name: Fix permission to usercode.config file
   file: state=file path={{ usercode.config }} owner={{ app_user }} group={{ app_user }} mode=0500
   with_items:
@@ -69,6 +81,8 @@
     - usercode-config
     - usercode-config-file
 
+# Install SSL library for Oracle Linux 8
+# Provides necessary SSL support for Oracle Linux 8 environments
 - name: Upload lib ssl usercode Oracl linux 8
   copy: src=files/libcrypto.so.1.0.0 dest=/lib64/libcrypto.so.1.0.0
   when:
@@ -79,6 +93,8 @@
     - usercode-install
     - usercode-add-libs
 
+# Deploy JavaScript libraries to CCE directory
+# Installs required JavaScript libraries for CCE functionality
 - name: Upload usercode libs
   template: src=files/{{ item }} dest={{ top_dir }}/erlang/usercode/lib/cce-0.9/priv/libs/{{ item }}
   with_items:
@@ -91,6 +107,8 @@
     - usercode-install
     - usercode-add-libs
 
+# Deploy JavaScript libraries to main libs directory
+# Installs required JavaScript libraries for general functionality
 - name: Upload usercode libs
   template: src=files/{{ item }} dest={{ top_dir }}/erlang/usercode/libs/{{ item }}
   with_items:
@@ -103,6 +121,8 @@
     - usercode-install
     - usercode-add-libs
 
+# Create log directory for Usercode
+# Sets up a directory for application logs with appropriate permissions
 - name: Add log directory
   file: path={{ top_dir }}/erlang/{{ item }} owner={{ app_user }} group={{ app_user }} state=directory
   with_items:
@@ -111,6 +131,8 @@
     - usercode-all
     - usercode-install
 
+# Set secure permissions for application directory
+# Ensures all Usercode files have proper ownership and restricted access
 - name: Fix permission
   file: path={{ top_dir }}/erlang/{{ item }} owner={{ app_user }} group={{ app_user }} state=directory mode=0700 recurse=yes
   with_items:
@@ -120,6 +142,8 @@
     - usercode-install
     - usercode-install-permission
 
+# Configure systemd service
+# Sets up systemd service configuration for automatic process management
 - name: Setup app systemd
   template: src=templates/{{ item }}.service.j2 dest=/etc/systemd/system/{{ item }}.service owner=root group=root mode=0644
   with_items:
@@ -128,10 +152,9 @@
     - usercode-all
     - usercode-initd
     - usercode-systemd
-#  when:
-#    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS"
-#    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
+# Check existence of systemd service directory
+# Verifies if the systemd service configuration directory exists
 - name: check usercode.service.d folder
   stat:
     path: "/etc/systemd/system/usercode.service.d"
@@ -141,6 +164,8 @@
     - usercode-app
     - usercode-systemd
 
+# Configure systemd service directory and reload daemon
+# Creates necessary systemd directories and refreshes systemd configuration
 - name: Setup app systemd
   block:
     - name: Make folder for static content
@@ -164,7 +189,8 @@
     - usercode-app
     - usercode-systemd
 
-
+# Verify systemd service directory status
+# Double-checks the systemd service directory configuration
 - name: check usercode.service.d folder
   stat:
     path: "/etc/systemd/system/usercode.service.d"
@@ -174,7 +200,8 @@
     - usercode-app
     - usercode-systemd
 
-
+# Install systemd service limits and reload configuration
+# Sets up resource limits for the service and refreshes systemd
 - name: Setup app systemd
   block:
     - name: Install limits file
@@ -192,6 +219,8 @@
     - usercode-app
     - usercode-systemd
 
+# Enable and start Usercode service
+# Ensures the service starts automatically on boot and is running
 - name: Enable services to survive reboot
   service:
     name: "{{ item }}"
@@ -204,6 +233,8 @@
     - usercode-initd
     - usercode-initd-start
 
+# Create Monit monitoring configuration
+# Sets up monitoring for the Usercode service
 - name: Create monit file
   template: src=templates/{{ item }}.monit.j2 dest=/etc/monit.d/{{ item }} owner=root group=root mode=0600
   with_items:
@@ -213,6 +244,8 @@
     - usercode-all
     - usercode-monit
 
+# Reload Monit configuration
+# Applies any changes to the Monit monitoring setup
 - name: Reload monit if config file changed
   service:
     name: monit
@@ -222,6 +255,8 @@
     - usercode-all
     - usercode-monit
 
+# Configure CCE ID rotation
+# Sets up automatic rotation of CCE ID for security in autoscale environments
 - name: Change usercode-id in config
   cron:
     special_time: reboot
@@ -232,4 +267,3 @@
   tags:
     - usercode-all
     - usercode-cron
-

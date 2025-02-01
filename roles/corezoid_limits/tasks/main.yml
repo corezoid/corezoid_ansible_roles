@@ -1,12 +1,16 @@
+# Clean YUM cache to ensure fresh package metadata
+# Removes all cached package data to prevent installation issues and ensure clean state
 - name: Yum clean all
   command: yum clean all
-#  args:
-#    warn: false
+  #  args:
+  #    warn: false
   tags:
     - corezoid_limits-all
     - corezoid_limits-app
     - corezoid_limits-install
 
+# Install Corezoid Limits package
+# Installs or updates the corezoid_limits package from AWS Corezoid repository with specific version
 - name: Install package corezoid_limits
   yum:
     name: "{{ item }}"
@@ -21,6 +25,8 @@
     - corezoid_limits-app
     - corezoid_limits-install
 
+# Create log directory for Corezoid Limits
+# Sets up a secure directory for application logs with restricted permissions
 - name: add log directory
   file: path={{ top_dir }}/erlang/{{ item }}/log owner={{ app_user }} group={{ app_user }} state=directory mode=0700
   with_items:
@@ -30,6 +36,8 @@
     - corezoid_limits-app
     - corezoid_limits-install
 
+# Set secure permissions for application directory
+# Ensures all Corezoid Limits files have proper ownership and restricted access
 - name: fix permission
   file:
     path: "{{ top_dir }}/erlang/{{ item }}"
@@ -46,6 +54,8 @@
     - corezoid_limits-app
     - corezoid_limits-install
 
+# Generate Corezoid Limits configuration file
+# Creates the main configuration file from template with proper settings
 - name: Create corezoid_limits config file
   template:
     src: "templates/{{ corezoid_release }}-{{ item }}.config.j2"
@@ -57,6 +67,8 @@
     - corezoid_limits-app
     - corezoid_limits-config-file
 
+# Set secure permissions for configuration file
+# Restricts access to the configuration file for security on non-localhost systems
 - name: Fix permission to corezoid_limits.config file
   file: state=file path={{ corezoid_limits_config }} owner={{ app_user }} group={{ app_user }} mode=0500
   with_items:
@@ -67,6 +79,8 @@
     - corezoid_limits-app
     - corezoid_limits-config-file
 
+# Configure systemd service
+# Sets up systemd service configuration for automatic process management
 - name: Setup app systemd
   template: src=templates/{{ item }}.service.j2 dest=/etc/systemd/system/{{ item }}.service owner=root group=root mode=0644
   with_items:
@@ -79,6 +93,8 @@
     - ansible_os_family == "RedHat" or ansible_os_family == "CentOS"
     - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
+# Enable and start Corezoid Limits service
+# Ensures the service starts automatically on boot and is running
 - name: Enable corezoid_limits to survive reboot
   service:
     name: "{{ item }}"
@@ -93,6 +109,8 @@
     - corezoid_limits-initd
     - corezoid_limits-initd-start
 
+# Create Monit monitoring configuration
+# Sets up monitoring for the Corezoid Limits service
 - name: Create monit file
   template: src=templates/{{ item }}.monit.j2 dest=/etc/monit.d/{{ item }} owner=root group=root mode=0600
   with_items:
@@ -103,6 +121,8 @@
     - corezoid_limits-app
     - corezoid_limits-monit
 
+# Reload Monit configuration
+# Applies any changes to the Monit monitoring setup if configuration was modified
 - name: Reload monit if config file changed
   service:
     name: monit
