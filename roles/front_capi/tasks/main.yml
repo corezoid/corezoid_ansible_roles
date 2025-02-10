@@ -1,4 +1,6 @@
 ---
+# Display server IP addresses for debugging
+# Shows all configured IPv4 addresses on the target system
 - name: current ansible_all_ipv4_addresses
   debug: msg={{ ansible_all_ipv4_addresses }}
   tags:
@@ -6,16 +8,20 @@
     - front-capi-app
     - front-capi-debug
 
+# Clean YUM cache to ensure fresh package metadata
+# Removes all cached package data to prevent installation issues
 - name: Yum clean all
   command: yum clean all
-#  args:
-#    warn: false
+  #  args:
+  #    warn: false
   tags:
     - front-capi-app
     - front-capi-all
     - front-capi-nginx-setup
     - front-capi-nginx-package
 
+# Install Nginx web server
+# Sets up the Nginx package from default repositories
 - name: Install nGinx package
   yum:
     name: "{{ item }}"
@@ -28,6 +34,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-package
 
+# Install Corezoid Web Admin interface
+# Deploys the web administration interface from Corezoid repository
 - name: Install corezoid-web-admin package
   yum:
     name: "{{ item }}"
@@ -43,6 +51,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-package-corezoid-web
 
+# Install Superadmin static content
+# Deploys superadmin interface for newer Corezoid versions
 - name: Install Superadmin static
   yum:
     name: "{{ item }}"
@@ -59,7 +69,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-superadmin
 
-
+# Create image directory structure
+# Sets up main directory for storing images
 - name: Create nGinx img dir
   file: path={{ top_dir }}/img owner=nginx group=nginx state=directory mode=0755
   tags:
@@ -67,6 +78,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-setup-img
 
+# Create subdirectories for branding assets
+# Sets up directories for favicon and logo storage
 - name: Create nGinx dir for favicon and logo
   file: path={{ top_dir }}/img/{{ item }} owner=nginx group=nginx state=directory mode=0755
   with_items:
@@ -77,9 +90,10 @@
     - front-capi-nginx-setup
     - front-capi-nginx-setup-img
 
+# Deploy default branding assets
+# Installs default favicon and logo files
 - name: Add default avatars
   copy: src=files/img/{{ item }} dest={{ top_dir }}/img owner=nginx group=nginx mode=0644
-  # when: def_avatar_check.stat.isreg is not defined
   with_items:
     - "favicon"
     - "logo"
@@ -89,6 +103,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-setup-img
 
+# Remove default Nginx configurations
+# Cleans up default configuration files to prevent conflicts
 - name: Delete nGinx default configs
   file: path=/etc/nginx/conf.d/{{ item }} state=absent
   with_items:
@@ -100,6 +116,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-delete
 
+# Create main Nginx configurations
+# Sets up primary configuration files for Corezoid and superadmin
 - name: Create nGinx main configs
   template: src=templates/{{ corezoid_release }}-{{ item }}.j2 dest=/etc/nginx/conf.d/{{ item }} owner=root group=root mode=0644
   with_items:
@@ -111,6 +129,7 @@
     - front-capi-nginx-configs
     - front-capi-nginx-configs-main
 
+# HCS configuration (commented)
 #- name: Create nGinx configs for HCS
 #  template: src=templates/{{ corezoid_release }}-{{ item }}.j2 dest=/etc/nginx/conf.d/{{ item }} owner=root group=root mode=0644
 #  with_items:
@@ -121,6 +140,8 @@
 #    - front-capi-nginx-setup
 #    - front-capi-nginx-configs
 
+# Create symbolic link for superadmin
+# Sets up symbolic link for superadmin interface access
 - name: Create symbolic for superadmin
   file:
     src: "/ebsmnt/www/conf-agent-client"
@@ -133,6 +154,8 @@
     - front-capi-nginx-configs
     - front-capi-nginx-symlink
 
+# Configure Nginx upstream and status
+# Creates configuration for load balancing and status monitoring
 - name: Create nGinx default configs
   template: src=templates/{{ item }}.j2 dest=/etc/nginx/conf.d/corezoid-{{ item }} owner=root group=root mode=0644
   with_items:
@@ -143,6 +166,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-configs
 
+# Create SSL directory structure
+# Sets up directory for SSL certificates with secure permissions
 - name: Create nGinx ssl dir
   file: path={{ nginx_ssl_dir }} owner=root group=root state=directory mode=0755
   tags:
@@ -150,6 +175,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-setup-ssl
 
+# Deploy SSL certificate
+# Installs SSL certificate with secure permissions
 - name: Copy SSL certificate data
   copy:
     content: "{{ nginx_ssl_content }}"
@@ -162,6 +189,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-setup-ssl
 
+# Configure SSL certificate settings
+# Sets up SSL configuration for secure communication
 - name: Create nGinx ssl conf
   template: src=templates/{{ item }}.j2 dest={{ nginx_ssl_dir }}/{{ item }} owner=root group=root mode=0600
   with_items:
@@ -171,6 +200,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-setup-ssl
 
+# Create SSL certificate symlinks
+# Sets up symbolic links for SSL certificate files
 - name: Create nGinx ssl links
   file: src={{ nginx_ssl_filename }} dest={{ nginx_ssl_dir }}/{{ item }} state=link
   with_items:
@@ -181,6 +212,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-setup-ssl
 
+# Create main Nginx configuration
+# Sets up the primary Nginx server configuration
 - name: Create nGinx conf
   template: src=templates/nginx.conf.j2 dest=/etc/nginx/nginx.conf owner=root group=root mode=0600
   tags:
@@ -188,6 +221,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-mainconfig
 
+# Enable and start Nginx service
+# Ensures Nginx starts on boot and is running
 - name: Enable nGinx to survive reboot
   service:
     name: nginx
@@ -198,6 +233,8 @@
     - front-capi-nginx-setup
     - front-capi-nginx-system
 
+# Restart Nginx to apply changes
+# Forces Nginx to reload with new configuration
 - name: Restart nGinx
   service:
     name: nginx

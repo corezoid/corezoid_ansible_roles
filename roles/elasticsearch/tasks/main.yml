@@ -1,6 +1,8 @@
 ---
 # curl -XGET 'http://localhost:9200/_cluster/health?pretty=true'
 
+# Remove legacy Elasticsearch repository
+# Cleans up old 2.x repository configuration to prevent conflicts
 - name: Remove old elasticsearch repo
   file:
     path: /etc/yum.repos.d/elasticsearch-2x.repo
@@ -10,6 +12,8 @@
     - elasticsearch-install
     - elasticsearch-repo-install
 
+# Configure Elasticsearch repository
+# Sets up the repository configuration for the specified Elasticsearch version
 - name: Add Elasticsearch repo
   template:
     src: templates/{{ elasticsearch.version }}-elasticsearch.repo.j2
@@ -19,14 +23,16 @@
     - elasticsearch-install
     - elasticsearch-repo-install
 
+# Clean YUM cache
+# Ensures fresh package metadata for installation
 - name: Yum clean all
   command: yum clean all
-#  args:
-#    warn: false
   tags:
     - elasticsearch-all
     - elasticsearch-install
 
+# Install Java for Amazon Linux 2
+# Sets up OpenJDK 11 using amazon-linux-extras
 - name: Install Java
   shell: amazon-linux-extras install java-openjdk11 -y
   tags:
@@ -34,6 +40,8 @@
     - elasticsearch-install
   when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
 
+# Install Java for Amazon Linux 2023
+# Sets up Java 11 using standard package manager
 - name: Install Java AMI3
   shell: yum install java-11 -y
   tags:
@@ -41,6 +49,8 @@
     - elasticsearch-install
   when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
 
+# Install Java for RedHat-based systems
+# Sets up OpenJDK 11 for CentOS/RHEL/Oracle Linux
 - name: Install Java
   yum:
     name: "{{ item }}"
@@ -56,13 +66,16 @@
     - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
     - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "8"
 
+# Configure crypto policies for CentOS 9
+# Updates crypto policies to support required algorithms
 - name: update-crypto-policies elasticsearch Centos 9
   shell: update-crypto-policies --set DEFAULT:SHA1
   when:
     - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
     - ansible_distribution_major_version == "9"
 
-##https://repo.middleware.biz/system/el7/elasticsearch-6.7.2.rpm
+# Install Elasticsearch package
+# Installs the specified version of Elasticsearch from configured repository
 - name: Install elasticsearch packages
   yum:
     name: "{{ item }}"
@@ -78,6 +91,8 @@
     - elasticsearch-all
     - elasticsearch-install
 
+# Install Nginx web server
+# Sets up Nginx for proxying Elasticsearch requests
 - name: Install nginx packages
   yum:
     name: "{{ item }}"
@@ -91,7 +106,8 @@
     - elasticsearch-all
     - elasticsearch-install
 
-
+# Create main Elasticsearch directory
+# Sets up the primary directory structure with proper permissions
 - name: Creates main directory for Elasticsearch
   file:
     path: "{{ top_dir }}/{{ elasticsearch_logs.es_main_dir }}"
@@ -105,6 +121,8 @@
     - elasticsearch-install
     - elasticsearch-install-main-dir
 
+# Generate Elasticsearch configuration
+# Creates the main Elasticsearch configuration from template
 - name: Create Elasticsearch Config
   template:
     src: "templates/{{ elasticsearch.version }}-{{ item }}.yml.j2"
@@ -119,6 +137,8 @@
     - elasticsearch-install
   register: elasticsearch_conf_changed
 
+# Create Elasticsearch subdirectories
+# Sets up required subdirectories for work, data, and plugins
 - name: Creates directories for Elasticsearch
   with_items:
     - work
@@ -135,6 +155,8 @@
     - elasticsearch-all
     - elasticsearch-install
 
+# Remove default Nginx configurations
+# Cleans up default Nginx configuration files
 - name: Nginx delete default configs
   file:
     path: "/etc/nginx/conf.d/{{ item }}"
@@ -147,6 +169,8 @@
     - elasticsearch-all
     - elasticsearch-nginx-setup
 
+# Configure main Nginx settings
+# Creates the primary Nginx configuration file
 - name: Create main nginx config file
   template:
     src: "templates/nginx.conf.j2"
@@ -159,6 +183,8 @@
     - elasticsearch-nginx-setup
   register: nginx_conf_changed
 
+# Set up Elasticsearch-specific Nginx configuration
+# Creates Nginx configuration for Elasticsearch access
 - name: Create nginx configs for Elasticsearch
   template:
     src: "templates/{{ item }}.j2"
@@ -175,11 +201,15 @@
     - elasticsearch-nginx-setup
   register: nginx_conf_changed
 
+# Reload systemd configuration
+# Forces systemd to reread configuration files
 - name: Force systemd to reread configs
   systemd:
     daemon_reload: yes
   when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "7"
 
+# Restart Elasticsearch service
+# Restarts Elasticsearch when configuration changes are detected
 - name: Restart ElasticSearch
   service:
     name: "{{ item }}"
@@ -192,8 +222,8 @@
     - elasticsearch-all
     - elasticsearch-install
 
-
-
+# Enable and start services
+# Ensures both Elasticsearch and Nginx start on boot and are running
 - name: Enable services to survive reboot
   service:
     name: "{{ item }}"
@@ -208,6 +238,8 @@
     - elasticsearch-all
     - elasticsearch-install
 
+# Create Monit monitoring configuration
+# Sets up monitoring for Elasticsearch service
 - name: Create monit file
   template:
     src: "templates/{{ item }}.monit.j2"
@@ -222,6 +254,8 @@
     - elasticsearch-all
     - elasticsearch-monit
 
+# Reload Monit configuration
+# Applies any changes to the Monit monitoring setup
 - name: Reload monit if config file changed
   service:
     name: monit
@@ -230,4 +264,3 @@
   tags:
     - elasticsearch-all
     - elasticsearch-monit
-
