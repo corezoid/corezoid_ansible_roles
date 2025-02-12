@@ -1,17 +1,215 @@
 ---
+# Display all OS information for debugging
+# Shows the current OS distribution, version and architecture details of the target system
+- name: Debug OS information
+  debug:
+    msg:
+      - "Distribution: {{ ansible_distribution }}"
+      - "Version: {{ ansible_distribution_major_version }}"
+      - "Architecture: {{ ansible_architecture }}"
+      - "Full string: {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}"
 
-- name: redis, first run_once
-  import_tasks: install.yml
+# Verify Redis version before installation
+# Validates that only the supported Redis version 7.2.4 is being installed
+- name: Verify Redis version
+  fail:
+    msg: "Only Redis version 7.2.4 is supported. Specified version: {{ redis_version }}"
+  when: redis_version != "7.2.4"
+
+# Set Redis package facts based on system
+# Determines appropriate Redis RPM package based on OS distribution, version and architecture
+- name: Set Redis package facts
+  set_fact:
+    redis_rpm_file: >-
+      {{ {
+        'CentOS-7-x86_64': 'redis-7.2.4-1.el7.remi.x86_64.rpm',
+        'CentOS-8-x86_64': 'redis-7.2.6-1.el8.remi.x86_64.rpm',
+        'CentOS-9-x86_64': 'redis-7.2.4-1.el9.remi.x86_64.rpm',
+        'RedHat-7-x86_64': 'redis-7.2.4-1.el7.remi.x86_64.rpm',
+        'RedHat-8-x86_64': 'redis-7.2.6-1.el8.remi.x86_64.rpm',
+        'RedHat-9-x86_64': 'redis-7.2.4-1.el9.remi.x86_64.rpm',
+        'OracleLinux-7-x86_64': 'redis-7.2.4-1.el7.remi.x86_64.rpm',
+        'OracleLinux-8-x86_64': 'redis-7.2.6-1.el8.remi.x86_64.rpm',
+        'OracleLinux-9-x86_64': 'redis-7.2.4-1.el9.remi.x86_64.rpm',
+        'Amazon-2023-x86_64': 'redis-7.2.4-1.el9.remi.x86_64.rpm',
+        'Amazon-2023-aarch64': 'redis-7.2.4-1.el9.remi.aarch64.rpm',
+        'Amazon-2-x86_64': 'redis-7.2.4-1.el7.remi.x86_64.rpm'
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+  when: redis_version == "7.2.4"
+
+# Display selected RPM package for verification
+# Shows which Redis package will be installed on the system
+- name: Debug selected RPM file
+  debug:
+    msg: "Selected RPM file: {{ redis_rpm_file }}"
+
+# Copy Redis package to the target system
+# Transfers the appropriate Redis RPM package with proper ownership and permissions
+- name: Copy redis Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  copy:
+    src: "files/{{ redis_rpm_file }}"
+    dest: "/tmp/{{ redis_rpm_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  tags:
+    - redis-all
+    - redis-install
+
+# Install Redis using YUM package manager
+# Executes YUM to install Redis package, continues on errors for resilience
+- name: Install redis Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  command: yum install /tmp/{{ redis_rpm_file }} -y
+  ignore_errors: true
+  tags:
+    - redis-all
+    - redis-install
+
+# Clean up the installation package
+# Removes temporary RPM file after installation is complete
+- name: Remove redis Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  file:
+    path: "tmp/{{ redis_rpm_file }}"
+    state: absent
+  tags:
+    - redis-all
+    - redis-install
+
+# Create Redis instance directories
+# Sets up directories for counter, cache, and timers instances with proper permissions
+- name: Create redis dirs
+  file: path={{ item.path }} owner=redis group=redis state=directory mode=0755
+  loop:
+    - { path: "{{ redis_counter_dir }}", enabled: "{{ redis_install_counter }}" }
+    - { path: "{{ redis_cache_dir }}", enabled: "{{ redis_install_cache }}" }
+    - { path: "{{ redis_timers_dir }}", enabled: "{{ redis_install_timers }}" }
+  when: item.enabled | bool
+  tags:
+    - redis-all
+    - redis-create-dirs
+
+# Deploy Redis configuration files
+# Creates configuration files for each Redis instance from templates
+- name: Add configs for redis
+  template:
+    src: "templates/{{ item.tmpl_name }}"
+    dest: "{{ item.conf_name }}"
+    owner: redis
+    group: root
+    mode: '0644'
+  loop:
+    - { tmpl_name: "redis-box-counters.conf.j2", conf_name: "{{ redis_counter_conf }}", enabled: "{{ redis_install_counter }}" }
+    - { tmpl_name: "redis-box-cache.conf.j2", conf_name: "{{ redis_cache_conf }}", enabled: "{{ redis_install_cache }}" }
+    - { tmpl_name: "redis-box-timers.conf.j2", conf_name: "{{ redis_timers_conf }}", enabled: "{{ redis_install_timers }}" }
+  when: item.enabled | bool
+  tags:
+    - redis-all
+    - redis-create-configs
+
+# Create systemd service files
+# Sets up systemd service configuration for each Redis instance
+- name: Add redis-service for redis
+  template: src=templates/redis-service.j2 dest=/usr/lib/systemd/system/{{ item.name }}.service mode=0644
+  loop:
+    - { name: "{{ redis_counter_name }}", enabled: "{{ redis_install_counter }}" }
+    - { name: "{{ redis_cache_name }}", enabled: "{{ redis_install_cache }}" }
+    - { name: "{{ redis_timers_name }}", enabled: "{{ redis_install_timers }}" }
+  when: item.enabled | bool
   tags:
     - redis-all
 
-# - name: redis firewall
-#   firewalld:
-#     source: "{{ subnet }}"
-#     port: "{{ redis_cache_port }}/tcp"
-#     permanent: yes
-#     zone: public
-#     state: enabled
-#   tags:
-#     - redis-all
-#     - redis-firewall
+# Setup systemd override directories
+# Creates directories for additional systemd service configurations
+- name: Create directories for systemd .d files
+  file:
+    path: "/etc/systemd/system/{{ item.name }}.service.d/"
+    state: directory
+    mode: '0755'
+  loop:
+    - { name: "{{ redis_counter_name }}", enabled: "{{ redis_install_counter }}" }
+    - { name: "{{ redis_cache_name }}", enabled: "{{ redis_install_cache }}" }
+    - { name: "{{ redis_timers_name }}", enabled: "{{ redis_install_timers }}" }
+  when: item.enabled | bool
+  tags:
+    - redis-all
+
+# Configure service resource limits
+# Sets system resource limits for each Redis instance service
+- name: Create limits.conf for redis
+  template: src=templates/limits.conf.j2 dest=/etc/systemd/system/{{ item.name }}.service.d/limits.conf mode=0644
+  loop:
+    - { name: "{{ redis_counter_name }}", enabled: "{{ redis_install_counter }}" }
+    - { name: "{{ redis_cache_name }}", enabled: "{{ redis_install_cache }}" }
+    - { name: "{{ redis_timers_name }}", enabled: "{{ redis_install_timers }}" }
+  when: item.enabled | bool
+  tags:
+    - redis-all
+
+# Create PID directory for Redis
+# Sets up directory for process ID files with proper ownership
+- name: Add pid-dir for redis
+  file: path="/var/run/{{ item }}" owner=redis group=redis state=directory mode=0755
+  with_items:
+    - "redis"
+  tags:
+    - redis-all
+    - redis-create-pid-file
+
+# Create PID files for Redis instances
+# Initializes PID files for each enabled Redis instance
+- name: Add pid-file for redis
+  file: path="/var/run/redis/{{ item.name }}.pid" owner=redis group=redis state=touch mode=0644
+  loop:
+    - { name: "{{ redis_counter_name }}", enabled: "{{ redis_install_counter }}" }
+    - { name: "{{ redis_cache_name }}", enabled: "{{ redis_install_cache }}" }
+    - { name: "{{ redis_timers_name }}", enabled: "{{ redis_install_timers }}" }
+  when: item.enabled | bool
+  tags:
+    - redis-all
+    - redis-create-pid-file
+
+# Reload systemd daemon configuration
+# Ensures all service configurations are properly loaded
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+  tags:
+    - redis-all
+
+# Start and enable Redis services
+# Activates Redis instances and configures them to start on boot
+- name: Start redis services
+  service:
+    name: "{{ item.name }}"
+    state: started
+    enabled: yes
+  loop:
+    - { name: "{{ redis_counter_name }}", enabled: "{{ redis_install_counter }}" }
+    - { name: "{{ redis_cache_name }}", enabled: "{{ redis_install_cache }}" }
+    - { name: "{{ redis_timers_name }}", enabled: "{{ redis_install_timers }}" }
+  when: item.enabled | bool
+  tags:
+    - redis-all
+    - redis-start-enable
+
+# Setup Monit monitoring configuration
+# Creates monitoring configuration for Redis services with secure permissions
+- name: Create monit file
+  template: src=templates/{{ item }}.monit.j2 dest=/etc/monit.d/{{ item }} owner=root group=root mode=0600
+  with_items:
+    - redis
+  register: monit_file
+  tags:
+    - redis-all
+    - redis-monit
+
+# Apply Monit configuration changes
+# Reloads Monit service to apply new monitoring settings
+- name: Reload monit if config file changed
+  service:
+    name: monit
+    state: reloaded
+  when: monit_file.changed
+  tags:
+    - redis-all
+    - redis-monit

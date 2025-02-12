@@ -5,7 +5,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/bin/redis-server /etc/{{ item }}.conf --daemonize no --supervised systemd
+ExecStart=/usr/bin/redis-server /etc/{{ item.name }}.conf --daemonize no --supervised systemd
 #ExecStop=/usr/libexec/redis-shutdown
 Type=notify
 User=redis
