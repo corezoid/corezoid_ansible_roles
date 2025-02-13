@@ -166,8 +166,7 @@ MIT
 
 ## Author
 
-Created by [Author Name]  
-Maintained by [Company Name]
+Created and maintained by Middleware
 
 ## Support
 

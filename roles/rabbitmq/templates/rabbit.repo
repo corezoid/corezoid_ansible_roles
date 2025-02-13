@@ -1,6 +1,0 @@
-[rabbit]
-name=redis
-baseurl=https://repo.middleware.biz/system/el9
-enabled=1
-gpgcheck=0
-priority=4
