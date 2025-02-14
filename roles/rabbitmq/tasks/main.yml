@@ -1,0 +1,401 @@
+# This playbook handles RabbitMQ installation and configuration across different OS distributions
+# Main supported distributions: CentOS, RedHat, OracleLinux, and Amazon Linux\
+
+# Display all OS information for debugging
+# Shows the current OS distribution, version and architecture details of the target system
+- name: Debug OS information
+  debug:
+    msg:
+      - "Distribution: {{ ansible_distribution }}"
+      - "Version: {{ ansible_distribution_major_version }}"
+      - "Architecture: {{ ansible_architecture }}"
+      - "Full string: {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}"
+
+# Verify Rabbit version before installation
+# Validates that only the supported Rabbit version 3.12.2 is being installed
+- name: Verify versions
+  fail:
+    msg: |
+      Version verification failed:
+      - RabbitMQ: Only 3.12.2 is supported. Current: {{ rmq_version }}
+      - Erlang: Only 26.0.2 is supported. Current: {{ rmq_erl_version }}
+  when: rmq_version != "3.12.2" or rmq_erl_version != "26.0.2"
+
+# Set Rabbit package facts based on system
+# Determines appropriate Rabbit RPM package based on OS distribution, version and architecture
+- name: Set RabbitMQ package facts
+  set_fact:
+    rabbit_rpm_file: >-
+      {{ {
+        'CentOS-7-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'CentOS-8-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'CentOS-9-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'RedHat-7-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'RedHat-8-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'RedHat-9-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'OracleLinux-7-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'OracleLinux-8-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'OracleLinux-9-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'Amazon-2023-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'Amazon-2023-aarch64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'Amazon-2-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm'
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+  when: rmq_version == "3.12.2" and rmq_erl_version == "26.0.2"
+
+# Set Erlang package facts based on system
+# Determines appropriate Erlang RPM package based on OS distribution, version and architecture
+- name: Set Erlang package facts
+  set_fact:
+    erlang_rpm_file: >-
+      {{ {
+        'CentOS-7-x86_64': 'erlang-26.0.2-1.el7.x86_64.rpm',
+        'CentOS-8-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'CentOS-9-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'RedHat-7-x86_64': 'erlang-26.0.2-1.el7.x86_64.rpm',
+        'RedHat-8-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'RedHat-9-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'OracleLinux-7-x86_64': 'erlang-26.0.2-1.el7.x86_64.rpm',
+        'OracleLinux-8-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'OracleLinux-9-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'Amazon-2023-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'Amazon-2023-aarch64': 'erlang-26.0.2-1.amzn2023.aarch64.rpm',
+        'Amazon-2-x86_64': 'erlang-26.0.2-1.el7.x86_64.rpm'
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+  when: rmq_version == "3.12.2" and rmq_erl_version == "26.0.2"
+
+# Set Socat package facts based on system
+# Determines appropriate Socat RPM package based on OS distribution, version and architecture
+- name: Set Socat package facts
+  set_fact:
+    socat_rpm_file: >-
+      {{ {
+        'CentOS-7-x86_64': 'socat-1.7.3.2-2.el7.x86_64.rpm',
+        'CentOS-8-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'CentOS-9-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'RedHat-7-x86_64': 'socat-1.7.3.2-2.el7.x86_64.rpm',
+        'RedHat-8-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'RedHat-9-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'OracleLinux-7-x86_64': 'socat-1.7.3.2-2.el7.x86_64.rpm',
+        'OracleLinux-8-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'OracleLinux-9-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'Amazon-2023-x86_64': 'socat-1.7.4.2-1.amzn2023.0.2.x86_64.rpm',
+        'Amazon-2023-aarch64': 'socat-1.7.4.2-1.amzn2023.0.2.aarch64.rpm',
+        'Amazon-2-x86_64': 'socat-1.7.3.2-2.el7.x86_64.rpm'
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+  when: rmq_version == "3.12.2" and rmq_erl_version == "26.0.2"
+
+# Debug selected RPM files
+- name: Debug selected RPM files
+  debug:
+    msg:
+      - "Selected RabbitMQ RPM: {{ rabbit_rpm_file }}"
+      - "Selected Erlang RPM: {{ erlang_rpm_file }}"
+      - "Selected Socat RPM: {{ socat_rpm_file }}"
+
+# Copy packages
+- name: Copy RabbitMQ packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  copy:
+    src: "files/{{ item }}"
+    dest: "/tmp/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  with_items:
+    - "{{ rabbit_rpm_file }}"
+    - "{{ erlang_rpm_file }}"
+    - "{{ socat_rpm_file }}"
+  tags:
+    - rabbit-all
+    - rabbit-install
+
+# Install packages
+- name: Install RabbitMQ packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  command: yum install /tmp/{{ item }} -y
+  with_items:
+    - "{{ socat_rpm_file }}"
+    - "{{ erlang_rpm_file }}"
+    - "{{ rabbit_rpm_file }}"
+  ignore_errors: true
+  tags:
+    - rabbit-all
+    - rabbit-install
+
+# Clean up installation packages
+- name: Remove RabbitMQ packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  file:
+    path: "/tmp/{{ item }}"
+    state: absent
+  with_items:
+    - "{{ rabbit_rpm_file }}"
+    - "{{ erlang_rpm_file }}"
+    - "{{ socat_rpm_file }}"
+  tags:
+    - rabbit-all
+    - rabbit-install
+
+# Configure Erlang cookie for cluster authentication
+- name: copy erlang cookie
+  template:
+    src: erlang.cookie.j2
+    dest: "{{ rabbitmq_erlang_cookie_file_path }}"
+    owner: rabbitmq
+    group: rabbitmq
+    mode: 0400
+    backup: yes
+  tags:
+    - rabbitmq-all
+    - rabbitmq-install
+    - rabbitmq-install-cookie
+
+# Deploy RabbitMQ configuration for non-autoscaling setup
+- name: copy the rabbitmq configuration file
+  template:
+    src: rabbitmq.config.j2
+    dest: "{{ rabbitmq_config_file_path }}"
+    owner: "{{ rabbitmq_config_file_owner }}"
+    group: "{{ rabbitmq_config_file_group }}"
+    mode: "{{ rabbitmq_config_file_mode }}"
+    backup: yes
+  tags:
+    - rabbitmq-all
+    - rabbitmq-set-pass
+
+# Configure system limits for file handles (RHEL 7/8 only)
+- name: alter number of system's open file if rabbitmq_system_number_open_files is set
+  block:
+    - name: make sure service.d exists
+      file:
+        path: "{{ rabbitmq_service_d_path }}"
+        state: directory
+
+    - name: change limit of system's number of open file
+      template:
+        src: limits.conf.j2
+        dest: "{{ rabbitmq_service_d_path }}/limits.conf"
+        backup: true
+  when: rabbitmq_system_number_open_files is defined and ansible_os_family == "RedHat" and ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-set-pass
+
+# Debug admin password
+- name: current rmq_admin_pass
+  debug: msg={{ rmq_admin_pass }}
+  tags:
+    - rabbitmq-all
+    - rabbitmq-set-pass-debug
+
+# Configure RabbitMQ plugins
+- name: setup RabbitMQ plugins list
+  template: src=templates/enabled_plugins.j2 dest=/etc/rabbitmq/enabled_plugins owner=root group=root mode=0644
+  tags:
+    - rabbitmq-all
+    - rabbitmq-enable-plugins
+
+# Enable RabbitMQ service and start it
+- name: enable rabbitmq-server to survive reboot
+  service: name=rabbitmq-server state=started enabled=yes
+  tags:
+    - rabbitmq-all
+    - rabbitmq-enable-autostart
+
+# Create required virtual hosts
+- name: ensure vhost is present
+  rabbitmq_vhost:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - "{{ rmq_vhost }}"
+    - "{{ rmq_vhost_gitcall }}"
+    - "{{ rmq_vhost_dbcall }}"
+    - "{{ rmq_vhost_dundergitcall }}"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-add-vhost
+
+# Add admin user with full privileges to all vhosts
+# Uses administrator tag for management UI access
+- name: add admin users
+  rabbitmq_user:
+    user: "{{ item.login }}"
+    password: "{{ item.pass }}"
+    tags: "administrator,management"
+    vhost: "{{ item.vhost }}"
+    configure_priv: .*
+    write_priv: .*
+    read_priv: .*
+    state: present
+  with_items:
+    - { "login": "admin", "pass": "{{ rmq_admin_pass }}", "vhost": "{{ rmq_vhost }}" }
+    - { "login": "admin", "pass": "{{ rmq_admin_pass }}", "vhost": "{{ rmq_vhost_gitcall }}" }
+    - { "login": "admin", "pass": "{{ rmq_admin_pass }}", "vhost": "{{ rmq_vhost_dbcall }}" }
+    - { "login": "admin", "pass": "{{ rmq_admin_pass }}", "vhost": "{{ rmq_vhost_dundergitcall }}" }
+  no_log: true
+  tags:
+    - rabbitmq-all
+    - rabbitmq-add-users
+    - rabbitmq-add-admin
+
+# Add conveyor_gc admin user to main vhost
+# Special purpose user for system operations
+- name: add conveyor_gc user
+  rabbitmq_user:
+    user: "{{ item.login }}"
+    password: "{{ item.pass }}"
+    tags: "administrator,management"
+    vhost: "{{ item.vhost }}"
+    configure_priv: .*
+    write_priv: .*
+    read_priv: .*
+    state: present
+  with_items:
+    - { "login": "conveyor_gc", "pass": "{{ rmq_app_user_pass_enc }}", "vhost": "{{ rmq_vhost }}" }
+  no_log: true
+  tags:
+    - rabbitmq-all
+    - rabbitmq-add-users
+    - rabbitmq-add-conveyor_gc
+
+# Add application users to all vhosts
+# Full permissions but no management access
+- name: add app users
+  rabbitmq_user:
+    user: "{{ item.login }}"
+    password: "{{ item.pass }}"
+    vhost: "{{ item.vhost }}"
+    configure_priv: .*
+    write_priv: .*
+    read_priv: .*
+    state: present
+  with_items:
+    - { "login": "{{ rmq_user }}", "pass": "{{ rmq_user_pass }}", "vhost": "{{ rmq_vhost }}" }
+    - { "login": "{{ rmq_user }}", "pass": "{{ rmq_user_pass }}", "vhost": "{{ rmq_vhost_gitcall }}" }
+    - { "login": "{{ rmq_user }}", "pass": "{{ rmq_user_pass }}", "vhost": "{{ rmq_vhost_dbcall }}" }
+    - { "login": "{{ rmq_user }}", "pass": "{{ rmq_user_pass }}", "vhost": "{{ rmq_vhost_dundergitcall }}" }
+  no_log: true
+  tags:
+    - rabbitmq-all
+    - rabbitmq-add-users
+
+# Remove deprecated users from the system
+- name: ensure the trash users are removed
+  rabbitmq_user:
+    user={{ item }}
+    state=absent
+  with_items: "{{ rabbitmq_users_remove }}"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-set-pass
+
+# Enable management UI plugin for non-autoscale deployments
+- name: ensure rabbitmq_management is enabled
+  rabbitmq_plugin:
+    names: rabbitmq_management
+    state: enabled
+  tags:
+    - rabbitmq-all
+    - rabbitmq-plugins
+
+# Set HA policy for main vhost
+# All queues mirrored to all nodes
+- name: Ensure the conveyor vhost contains the HA policy
+  rabbitmq_policy:
+    name: ha-all
+    pattern: .*
+    vhost: "{{ item }}"
+    priority: "0"
+  args:
+    tags:
+      ha-mode: all
+  with_items:
+    - "{{ rmq_vhost }}"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-policy
+
+# Set HA policy for gitcall vhosts
+# Mirror all queues across cluster
+- name: Ensure the gitcall vhost contains the HA policy
+  rabbitmq_policy:
+    name: "ha-all-{{ item }}"
+    pattern: .*
+    vhost: "/{{ item }}"
+    priority: "0"
+  args:
+    tags:
+      ha-mode: all
+  with_items:
+    - "gitcall"
+    - "dundergitcall"
+  tags:
+    - rabbitmq-all
+    - rabbitmq-policy
+
+# Update hosts file on all nodes
+- name: Add RabbitMQ nodes to /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    line: "{{ item.ip }} {{ item.hostname }}"
+    state: present
+  with_items: "{{ rabbitmq_cluster_nodes }}"
+  when: rabbitmq_create_cluster | bool
+  tags:
+    - rabbitmq-cluster
+
+# Check required ports before cluster setup
+- name: Check RabbitMQ ports connectivity to master node
+  wait_for:
+    host: "{{ hostvars[rabbitmq_cluster_master]['ansible_host'] | default(hostvars[rabbitmq_cluster_master]['ansible_ssh_host'], true) | default(rabbitmq_cluster_master) }}"
+    port: "{{ item }}"
+    state: started
+    timeout: 5
+  with_items:
+    - 4369  # epmd
+    - 5672  # AMQP
+    - 15672 # Management UI
+  when:
+    - rabbitmq_create_cluster | bool
+    - inventory_hostname != rabbitmq_cluster_master
+  register: port_check
+  ignore_errors: true
+  tags:
+    - rabbitmq-cluster
+
+# Fail if ports are not accessible
+- name: Fail if ports are not accessible
+  fail:
+    msg: "Required ports (4369, 5672, 15672) are not accessible on master node {{ rabbitmq_cluster_master }}"
+  when:
+    - rabbitmq_create_cluster | bool
+    - inventory_hostname != rabbitmq_cluster_master
+    - port_check is failed
+  tags:
+    - rabbitmq-cluster
+
+# Configure cluster on secondary nodes
+- name: Configure RabbitMQ cluster
+  block:
+    - name: Stop RabbitMQ app
+      command: rabbitmqctl stop_app
+
+    - name: Reset RabbitMQ
+      command: rabbitmqctl reset
+
+    - name: Join RabbitMQ cluster
+      command: "rabbitmqctl join_cluster rabbit@{{ rabbitmq_cluster_master }}"
+
+    - name: Start RabbitMQ app
+      command: rabbitmqctl start_app
+
+    - name: Check cluster status
+      command: rabbitmqctl cluster_status
+      register: cluster_status
+
+    - name: Debug cluster status
+      debug:
+        var: cluster_status.stdout_lines
+  when:
+    - rabbitmq_create_cluster | bool
+    - ansible_hostname != rabbitmq_cluster_master
+  tags:
+    - rabbitmq-cluster
