@@ -3,9 +3,6 @@
 - name: Make certs folder
   file: path={{ license_file_path }} owner="{{ app_user }}" group="{{ app_user }}" state=directory mode=0755
   when: license_as_file
-  tags:
-    - license-server-all
-    - license-server-config
 
 # Deploy Corezoid 5.x license file
 # Copies the license file from local source to target server with proper ownership and permissions
@@ -19,6 +16,3 @@
   when: license_as_file
   with_items:
     - "{{ license_file_name }}"
-  tags:
-    - license-server-all
-    - license-server-upload-files
