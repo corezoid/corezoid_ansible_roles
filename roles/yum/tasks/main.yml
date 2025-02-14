@@ -1,108 +1,25 @@
 ---
-- name: get device name
-  set_fact:
-    device_name: "{{ item.key }}"
-  no_log: True
-  with_dict: "{{ ansible_devices }}"
-  when: "item.value.host.startswith('SATA')"
-
 - debug:
-    msg:
-      - "Hostname: {{ ansible_hostname }}"
-      - "IP: {{ ansible_default_ipv4.address }}"
-      - "CPU count: {{ ansible_processor_vcpus }}"
-      - "Tatal mem: {{ ansible_memtotal_mb }} Mb"
-      # - "{{ ansible_devices[device_name] }}"
-      # - "{{ ansible_facts }}"
-  tags:
-    - yum-all
-    - getServerTTX
-
-- debug:
-    msg: "ansible_distribution - {{ ansible_distribution }}"
-  tags:
-    - yum-all
-    - getdist
-
-- debug:
-    msg: "ansible_distribution_major_version - {{ ansible_distribution_major_version }}"
-  tags:
-    - yum-all
-    - getdist
-
-- debug:
-    msg: "ansible_default_ipv4.address - {{ ansible_default_ipv4.address }}"
-  tags:
-    - yum-all
-    - getdist
-
-- debug:
-    msg: "ansible_os_family - {{ ansible_os_family }}"
+    msg: |
+      System Information:
+      ==================
+      Hostname: {{ ansible_hostname }}
+      IP: {{ ansible_default_ipv4.address }}
+      CPU count: {{ ansible_processor_vcpus }}
+      Total memory: {{ ansible_memtotal_mb }} MB
+      
+      Distribution Information:
+      =======================
+      Distribution: {{ ansible_distribution }}
+      Distribution version: {{ ansible_distribution_version }}
+      Major version: {{ ansible_distribution_major_version }}
+      OS family: {{ ansible_os_family }}
   tags:
     - yum-all
     - yum-debug
+    - getdist
 
-- debug:
-    msg: "ansible_distribution_version - {{ ansible_distribution_version }}"
-  tags:
-    - yum-all
-    - yum-debug
-
-
-- name: Upload epel-release-latest-7 rpm
-  copy:
-    src: "files/epel-release-latest-7.noarch.rpm"
-    dest: /tmp/epel-release-latest-7.noarch.rpm
-    owner: root
-    group: root
-    mode: '0644'
-  when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-    - ansible_distribution_major_version == "7"
-  tags:
-    - yum-all
-    - yum-epel-repo-install
-    - copy-epel
-
-- name: Install from uploaded rpm
-  yum: name=/tmp/epel-release-latest-7.noarch.rpm state=present
-  when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-    - ansible_distribution_major_version == "7"
-  # игнор чтоб пройти --check --diff
-  ignore_errors: yes
-  tags:
-    - yum-all
-    - yum-epel-repo-install
-
-
-- name: Upload epel-release-latest-8 rpm
-  copy:
-    src: "files/epel-release-latest-8.noarch.rpm"
-    dest: /tmp/epel-release-latest-8.noarch.rpm
-    owner: root
-    group: root
-    mode: '0644'
-  when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-    - ansible_distribution_major_version == "8"
-  tags:
-    - yum-all
-    - yum-epel-repo-install
-
-- name: Install from uploaded rpm
-  yum:
-    name: "/tmp/epel-release-latest-8.noarch.rpm"
-    state: present
-    disable_gpg_check: yes
-  when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-    - ansible_distribution_major_version == "8"
-  tags:
-    - yum-all
-    - yum-epel-repo-install
-
-- name: Enable exta repos for Amazon
+- name: Enable exta repos for Amazon linux 2
   block:
     - name: enable epel
       shell: amazon-linux-extras install epel -y
@@ -128,10 +45,5 @@
     - yum-all
     - yum-corezoid-repo
 
-- name: Add Middleware-System Repo
-  include: middleware-system.yaml
-  tags:
-    - yum-all
-    - yum-middleware-system-repo-install
 
 

@@ -1,15 +1,50 @@
-- name: Install Monit Packages
-  yum:
-    name: "{{ item }}"
-    update_cache: yes
-    state: present
-    # lock_timeout: 180
-  with_items:
-    - "monit"
+- name: Set Monit package facts
+  set_fact:
+    monit_rpm_file: >-
+      {{ {
+        'CentOS-7-x86_64': 'monit-5.25.1-1.el7.x86_64.rpm',
+        'CentOS-8-x86_64': 'monit-5.33.0-1.el8.x86_64.rpm',
+        'CentOS-9-x86_64': 'monit-5.33.0-1.el9.x86_64.rpm',
+        'RedHat-7-x86_64': 'monit-5.25.1-1.el7.x86_64.rpm',
+        'RedHat-8-x86_64': 'monit-5.33.0-1.el8.x86_64.rpm',
+        'RedHat-9-x86_64': 'monit-5.33.0-1.el9.x86_64.rpm',
+        'OracleLinux-7-x86_64': 'monit-5.25.1-1.el7.x86_64.rpm',
+        'OracleLinux-8-x86_64': 'monit-5.33.0-1.el8.x86_64.rpm',
+        'OracleLinux-9-x86_64': 'monit-5.33.0-1.el9.x86_64.rpm',
+        'Amazon-2023-x86_64': 'monit-5.33.0-1.el9.x86_64.rpm',
+        'Amazon-2023-aarch64': 'monit-5.33.0-1.el9.aarch64.rpm',
+        'Amazon-2-x86_64': 'monit-5.25.1-1.el7.x86_64.rpm'
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+
+- name: Copy redis Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  copy:
+    src: "files/{{ monit_rpm_file }}"
+    dest: "/tmp/{{ monit_rpm_file }}"
+    owner: root
+    group: root
+    mode: '0644'
   tags:
-    - system-all
-    - system-monit
-    - system-monit-install
+    - redis-all
+    - redis-install
+
+# Install Redis using YUM package manager
+# Executes YUM to install  package, continues on errors for resilience
+- name: Install redis Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  command: yum install /tmp/{{ monit_rpm_file }} -y
+  ignore_errors: true
+  tags:
+    - redis-all
+    - redis-install
+
+# Clean up the installation package
+# Removes temporary RPM file after installation is complete
+- name: Remove redis Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  file:
+    path: "/tmp/{{ monit_rpm_file }}"
+    state: absent
+  tags:
+    - redis-all
+    - redis-install
 
 - name: Create monit.conf file
   template:

@@ -1,12 +1,3 @@
 ---
 # vars file for system
-device_part_number: 1
 
-vg_name: "corezoid.services"
-vg_pesize: 32
-
-lv_db_name: "postgresqldata"
-lv_db_size: "100G"
-
-lv_app_name: "ebsmnt"
-lv_app_size: "99G"

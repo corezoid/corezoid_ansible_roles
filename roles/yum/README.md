@@ -1,38 +1,63 @@
-Role Name
-=========
+# Ansible Role: YUM Repository Management
 
-A brief description of the role goes here.
+Ansible role for managing YUM repositories on RHEL-based systems custom repository configuration.
 
-Requirements
-------------
+## Supported Platforms
 
-Any pre-requisites that may not be covered by Ansible itself or the role should be mentioned here. For instance, if the role uses the EC2 module, it may be a good idea to mention in this section that the boto package is required.
+- Enterprise Linux (RedHat/CentOS/OracleLinux) 7, 8, 9
+- Amazon Linux 2
+- Amazon Linux 2023
 
-Role Variables
---------------
+## Requirements
 
-A description of the settable variables for this role should go here, including any variables that are in defaults/main.yml, vars/main.yml, and any variables that can/should be set via parameters to the role. Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.) should be mentioned here as well.
+- Ansible version 2.13.5 or higher
+- Internet access for package downloads
+- Root access for package installation
 
-Dependencies
-------------
+## Role Variables
 
-A list of other roles hosted on Galaxy should go here, plus any details in regards to parameters that may need to be set for other roles, or variables that are used from other roles.
+### Main Variables
+```yaml
+yum_s3_bucket_prefix:                        # Path prefix in S3 bucket, examples:
+- "{{ corezoid_release }}/amazon2/arm64"   # Amazon Linux 2 ARM64
+- "{{ corezoid_release }}/amazon2/latest"  # Amazon Linux 2 x86_64
+- "{{ corezoid_release }}/amazon2023/arm64"  # Amazon Linux 2023 ARM64
+- "{{ corezoid_release }}/amazon2023/latest" # Amazon Linux 2023 x86_64
+- "{{ corezoid_release }}/redhat/7"        # RHEL/CentOS 7
+- "{{ corezoid_release }}/redhat/8"        # RHEL/CentOS 8
+- "{{ corezoid_release }}/redhat/9"        # RHEL/CentOS 9
+```
+### Basic Installation
+```yaml
+ - hosts: cz_all
+   become: true
+   vars_files:
+     - vars/box.yml
+     - vars/box-credentials.yml
+   roles:
+      - { role: yum,
+         yum_s3_bucket: "corezoid",
+         yum_s3_bucket_prefix: "{{ corezoid_release }}/amazon2023/arm64" }
+```
 
-Example Playbook
-----------------
+## Tags
 
-Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
+- `yum-all`: Execute all role tasks
+- `yum-debug`: Show system information
+- `yum-corezoid-repo`: Install Corezoid repository only
+- `getdist`: Show distribution information
 
-    - hosts: servers
-      roles:
-         - { role: username.rolename, x: 42 }
+## Diagnostics
 
-License
--------
+The role includes extended system information output that can be accessed using the `yum-debug` tag:
 
-BSD
+- Hostname
+- IP address
+- CPU count
+- Memory size
+- Distribution information
+- OS version
 
-Author Information
-------------------
+## Author
 
-An optional section for the role authors to include contact information, or a website (HTML is not allowed).
+Created and maintained by Middleware Inc.

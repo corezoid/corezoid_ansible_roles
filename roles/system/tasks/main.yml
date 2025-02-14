@@ -11,23 +11,9 @@
   - system-all
   - system-info
 
-# - name: Show Mem count
-#   ansible.builtin.debug:
-#     var: ansible_facts.memtotal_mb
-#   tags:
-#   - system-all
-#   - system-info
-
-# - name: Show Disk size
-#   shell: cat /proc/partitions | grep sdc |awk '{print $3}'
-#   tags:
-#   - system-all
-#   - system-info
-
 - name: Set hostname
   hostname:
     name: "{{ hostname }}"
-    # use: "redhat"
   when: hostname is defined
   tags:
   - system-all
@@ -69,27 +55,6 @@
     - system-all
     - system-iptables-action
 
-# - name: Check if IPv6 disabled at grub command line
-#   command: cat /proc/cmdline
-#   changed_when: false
-#   ignore_errors: true
-#   register: cmdline
-#   tags:
-#     - system-all
-#     - system-ipv6
-
-# - debug: var=cmdline
-# - debug: var=ansible_os_family
-# - debug: var=ipv6_config
-# - block:
-#     - include: ipv6-disable.yml
-#       when: ipv6_config is not defined or ipv6_config == 'disable'
-#   when: ansible_system == 'Linux' and not (' ipv6.disable=1' in cmdline.stdout)
-#   tags:
-#     - system-all
-#     - system-ipv6
-
-
 - name: Add app-user
   user: name={{ app_user | default('app-user') }} comment="Application user"
   tags:
@@ -117,35 +82,6 @@
   tags:
     - system-all
     - system-add-app-dir
-
-# - name: rmdir /opt
-#   file:
-#     path: "/opt"
-#     state: absent
-#   when:
-#     - ansible_distribution == "RedHat" or ansible_distribution == "CentOS" or ansible_distribution == "OracleLinux"
-#     - opt_sym_link == true
-#   tags:
-#     - system-all
-#     - system-add-app-dir
-
-# - name: link {{ top_dir }} to /opt
-#   file: src={{ top_dir }} dest=/opt owner=root group=root state=link
-#   when:
-#     - ansible_distribution == "RedHat" or ansible_distribution == "CentOS" or ansible_distribution == "OracleLinux"
-#     - opt_sym_link == true
-#   tags:
-#     - system-all
-#     - system-add-app-dir
-
-# - name: link {{ top_dir }} to /opt
-#   file: src=/opt dest={{ top_dir }} owner=root group=root state=link
-#   when:
-#     - top_dir_check.stat.exists == false
-#     - ansible_distribution == "RedHat" or ansible_distribution == "CentOS" or ansible_distribution == "OracleLinux"
-#   tags:
-#     - system-all
-#     - system-add-app-dir
 
 - name: change sysctl options
   sysctl: name={{ item.name }} value={{ item.value }} sysctl_set=yes state=present reload=yes
@@ -209,12 +145,6 @@
     - system-all
     - system-delete-trash-dir
 
-# - debug:
-#     msg: "{{ trash_dir.stat.exists }}"
-#   tags:
-#     - system-all
-#     - system-delete-trash-dir
-
 - name: Delete lost+found directory
   file:
     path: "{{ top_dir }}/lost+found"
@@ -257,21 +187,6 @@
   tags:
     - system-all
     - system-rpm
-# нужно для работы с RDS
-#- name: install Postgress Package for Centos/Rhel
-#  yum:
-#    name:
-#    - "postgresql{{ db_ver }}"
-#    lock_timeout: 360
-#    state: present
-#    update_cache: yes
-#  ignore_errors: yes
-#  when:
-#    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-#    - ansible_distribution_major_version == "7"
-#  tags:
-#    - system-all
-#    - system-rpm
 
 - name: Install python36 for RHEL/CentOS/OracleLinux 8
   yum:
