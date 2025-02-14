@@ -1,17 +1,4 @@
 ---
-# curl -XGET 'http://localhost:9200/_cluster/health?pretty=true'
-
-# Remove legacy Elasticsearch repository
-# Cleans up old 2.x repository configuration to prevent conflicts
-- name: Remove old elasticsearch repo
-  file:
-    path: /etc/yum.repos.d/elasticsearch-2x.repo
-    state: absent
-  tags:
-    - elasticsearch-all
-    - elasticsearch-install
-    - elasticsearch-repo-install
-
 # Configure Elasticsearch repository
 # Sets up the repository configuration for the specified Elasticsearch version
 - name: Add Elasticsearch repo
@@ -110,10 +97,10 @@
 # Sets up the primary directory structure with proper permissions
 - name: Creates main directory for Elasticsearch
   file:
-    path: "{{ top_dir }}/{{ elasticsearch_logs.es_main_dir }}"
+    path: "{{ top_dir }}/{{ elasticsearch.es_main_dir }}"
     state: directory
-    owner: "{{ elasticsearch_logs.es_dir_owner }}"
-    group: "{{ elasticsearch_logs.es_dir_owner }}"
+    owner: "{{ elasticsearch.es_dir_owner }}"
+    group: "{{ elasticsearch.es_dir_owner }}"
     mode: 0775
     recurse: yes
   tags:
@@ -127,8 +114,8 @@
   template:
     src: "templates/{{ elasticsearch.version }}-{{ item }}.yml.j2"
     dest: "/etc/{{ item }}/{{ item }}.yml"
-    owner: "{{ elasticsearch_logs.es_dir_owner }}"
-    group: "{{ elasticsearch_logs.es_dir_owner }}"
+    owner: "{{ elasticsearch.es_dir_owner }}"
+    group: "{{ elasticsearch.es_dir_owner }}"
     mode: 0750
   with_items:
     - elasticsearch
@@ -137,6 +124,19 @@
     - elasticsearch-install
   register: elasticsearch_conf_changed
 
+# Creates the main Elasticsearch JVM options from template
+- name: Configure JVM options
+  template:
+    src: templates/jvm.options.j2
+    dest: /etc/elasticsearch/jvm.options
+    owner: root
+    group: elasticsearch
+    mode: '0660'
+  tags:
+    - elasticsearch-all
+    - elasticsearch-jvm-config
+  register: elasticsearch_conf_changed
+  
 # Create Elasticsearch subdirectories
 # Sets up required subdirectories for work, data, and plugins
 - name: Creates directories for Elasticsearch
@@ -145,10 +145,10 @@
     - data
     - plugins
   file:
-    path: "{{ top_dir }}/{{ elasticsearch_logs.es_main_dir }}/{{ item }}"
+    path: "{{ top_dir }}/{{ elasticsearch.es_main_dir }}/{{ item }}"
     state: directory
-    owner: "{{ elasticsearch_logs.es_dir_owner }}"
-    group: "{{ elasticsearch_logs.es_dir_owner }}"
+    owner: "{{ elasticsearch.es_dir_owner }}"
+    group: "{{ elasticsearch.es_dir_owner }}"
     mode: 0775
     recurse: yes
   tags:
@@ -203,10 +203,9 @@
 
 # Reload systemd configuration
 # Forces systemd to reread configuration files
-- name: Force systemd to reread configs
+- name: Reload systemd daemon
   systemd:
     daemon_reload: yes
-  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "7"
 
 # Restart Elasticsearch service
 # Restarts Elasticsearch when configuration changes are detected

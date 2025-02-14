@@ -160,18 +160,8 @@ The role configures Monit monitoring with the following checks:
     - Check status: `monit status`
     - View logs: `tail -f /var/log/monit.log`
 
-## License
-
-MIT
-
+   
 ## Author
 
 Created and maintained by Middleware
 
-## Support
-
-If you encounter issues:
-
-1. Check the "Troubleshooting" section
-2. Review open and closed issues
-3. Create a new issue with a detailed problem description
