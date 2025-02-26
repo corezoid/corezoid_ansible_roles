@@ -1,4 +1,10 @@
 ---
+# PostgreSQL Database Setup and Configuration Playbook
+# Handles the creation and configuration of PostgreSQL databases, users, and schemas
+# Supports both main databases and sharded instances
+
+# Create general database roles
+# Sets up viewers and appusers roles with NOLOGIN attribute
 - name: Create general roles
   postgresql_user: >
     login_host={{ db_main.host }}
@@ -16,34 +22,47 @@
     - rds-all
     - rds-create-roles
 
+# Write and hash user passwords
+# Creates temporary files for password hashing and generates MD5 hashes
 - name: Write internal_user password to temporary file
   copy:
     content: "{{ db_app_user_pass }}internal_user"
     dest: /tmp/internal_user.txt
 
+# Write FDW user password to temporary storage
+# Stores FDW user credentials for later hashing
 - name: Write fdw_user password to temporary file
   copy:
     content: "{{ db_fdw_user_pass }}fdw_user"
     dest: /tmp/fdw_user.txt
 
+# Write monitoring user password to temporary storage
+# Stores monitoring user credentials for later hashing
 - name: Write monitoring_user password to temporary file
   copy:
     content: "{{ db_monitoring_user_password }}zabbix"
     dest: /tmp/monitoring_user.txt
 
-
+# Generate hash for internal user password
+# Creates MD5 hash from temporary password file
 - name: Hash password for internal_user from file
   shell: cat /tmp/internal_user.txt | md5sum | awk '{print "md5" $1}'
   register: internal_user_hash
 
+# Generate hash for FDW user password
+# Creates MD5 hash from temporary password file
 - name: Hash password for fdw_user from file
   shell: cat /tmp/fdw_user.txt | md5sum | awk '{print "md5" $1}'
   register: fdw_user_hash
 
+# Generate hash for monitoring user password
+# Creates MD5 hash from temporary password file
 - name: Hash password for internal_user from file
   shell: cat /tmp/monitoring_user.txt | md5sum | awk '{print "md5" $1}'
   register: monitoring_user_hash
 
+# Create application users
+# Sets up database users with appropriate encrypted passwords
 - name: create app user
   postgresql_user: >
     login_host={{ db_main.host }}
@@ -62,6 +81,8 @@
     - rds-all
     - rds-create-app-user
 
+# Clean up temporary password files
+# Removes all temporary files used for password hashing
 - name: Remove temporary internal_user file
   ansible.builtin.file:
     path: /tmp/{{ item.name }}.txt
@@ -71,6 +92,8 @@
     - { name: "fdw_user" }
     - { name: "monitoring_user" }
 
+# Grant roles to application users
+# Assigns appropriate role permissions to created users
 - name: grant role to app user
   postgresql_privs: >
     login_host={{ db_main.host }}
@@ -89,6 +112,8 @@
     - rds-all
     - rds-grant-role-to-app-user
 
+# Create main databases
+# Initializes core system databases for different services
 - name: Create main dbs
   postgresql_db: >
     name={{ item }}
@@ -109,6 +134,8 @@
     - rds-all
     - rds-create-main-dbs
 
+# Configure accounts database ownership
+# Sets specific ownership for the accounts database
 - name: Change owner accounts database
   postgresql_db: >
     name={{ item }}
@@ -123,6 +150,8 @@
     - rds-all
     - rds-create-main-dbs
 
+# Create shard databases
+# Sets up individual shard databases with naming pattern cp[number]
 - name: Create shards db
   postgresql_db: >
     name=cp{{ item }}
@@ -135,6 +164,8 @@
     - rds-all
     - rds-create-shard-dbs
 
+# Deploy main database schemas
+# Applies schema structure to main databases asynchronously
 - name: Deploy db schema for main db
   include: create_db_from_schema_main.yml local_db={{ outer_item }}
   with_items:
@@ -152,7 +183,8 @@
     - rds-all
     - rds-deploy-main-schema
 
-
+# Deploy shard database schemas
+# Applies schema structure to shard databases asynchronously
 - name: Deploy db schema for shards db
   include: create_db_from_schema_cp.yml local_db=cp{{ outer_item }}
   with_items: '{{ real_db_numbers }}'

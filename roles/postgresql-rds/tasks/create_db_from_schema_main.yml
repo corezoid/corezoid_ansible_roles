@@ -1,3 +1,10 @@
+---
+# PostgreSQL Schema Deployment and Permissions Configuration
+# Manages database schema deployment and sets up proper access privileges
+# Handles both main databases and sharded instances configuration
+
+# Set schema file paths for main databases
+# Determines the correct SQL file paths based on database type
 - name: set name for the main db sql file
   set_fact:
     local_db_schema: "{{ schema_path }}/{{ schema_path_suffix }}/{{ corezoid_release }}/init/{{ local_db }}.sql"
@@ -8,6 +15,8 @@
     - pgsql-all
     - pgsql-deploy-schema
 
+# Configure schema path for SSH tunnel
+# Sets up schema path for remote deployment
 - name: set schema name for ssh_tunnel
   set_fact:
     db_schema: "{{ local_db_schema }}"
@@ -15,8 +24,12 @@
     - pgsql-all
     - pgsql-deploy-schema
 
+# Debug schema path configuration
+# Displays selected schema path for verification
 - debug: msg={{ db_schema }}
 
+# Verify database table existence
+# Checks if any tables exist in the target database
 - name: ensure tables exist in {{ local_db }}
   shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_main.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "SELECT COUNT(1) FROM pg_stat_user_tables"
   register: check_db_tables
@@ -24,6 +37,8 @@
     - pgsql-all
     - pgsql-deploy-schema
 
+# Deploy database schema
+# Applies SQL schema to empty databases only
 - name: deploy db schema for {{ local_db }}
   shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_main.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -f {{ db_schema }}
   when:
@@ -34,6 +49,8 @@
     - pgsql-all
     - pgsql-deploy-schema
 
+# Set database privileges
+# Configures access permissions for different user roles
 - name: grant privileges on all tables in {{ local_db }}
   postgresql_privs: >
     db={{ local_db }}
@@ -56,6 +73,8 @@
     - pgsql-all
     - pgsql-deploy-schema
 
+# Verify trial payment plan
+# Checks existence of trial payment plan in conveyor database
 - name: check the trial payment plan exists
   shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_main.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "SELECT COUNT(1) FROM payment_plans WHERE title = 'trial'"
   register: check_payment_plan
@@ -65,7 +84,8 @@
     - pgsql-all
     - pgsql-deploy-schema
 
-
+# Initialize trial payment plan
+# Creates default trial payment plan if not exists
 - name: insert initial data
   shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_main.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "INSERT INTO payment_plans VALUES (1, 'trial', '1', 0, 15, 1000000, 'usd', 'interval');"
   when:
@@ -76,6 +96,8 @@
     - pgsql-all
     - pgsql-deploy-schema
 
+# Configure conveyor_fdw table ownership
+# Sets owner for foreign data wrapper table
 - name: Alter table conveyor_fdw
   shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_main.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "alter table conveyor_fdw OWNER TO {{ db_main.user }};"
   when:
@@ -96,18 +118,24 @@
 #    - pgsql-all
 #    - pgsql-deploy-schema
 
+# Grant schema privileges to appusers
+# Provides full schema access to application users
 - name: GRANT ALL PRIVILEGES appusers {{ local_db }}
   shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_main.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "GRANT ALL PRIVILEGES ON SCHEMA public TO appusers;"
   tags:
     - pgsql-all
     - pgsql-deploy-schema
 
+# Grant table privileges to appusers
+# Provides CRUD operations access on all tables
 - name: GRANT ALL TABLES appusers {{ local_db }}
   shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_main.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO appusers;"
   tags:
     - pgsql-all
     - pgsql-deploy-schema
 
+# Grant sequence privileges to appusers
+# Provides access to all sequences for ID generation
 - name: GRANT ALL SEQUENCES appusers {{ local_db }}
   shell: PGPASSWORD={{ db_superuser_password_enc }} psql -h {{ db_main.host }} -p {{ db_main.port }} -U {{ db_superuser_login }} {{ local_db }} -Atc "GRANT SELECT,UPDATE ON ALL SEQUENCES IN SCHEMA public TO appusers;"
   tags:
