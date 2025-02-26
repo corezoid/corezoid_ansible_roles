@@ -1,6 +1,4 @@
-# - set_fact:
-#     local_db: "{{ item }}"
-
+# Set file paths for database schema files
 - name: set name for the main db sql file
   set_fact:
     local_db_schema: "{{ schema_path }}/{{ schema_path_suffix }}/{{ corezoid_release }}/init/{{ local_db }}.sql"
@@ -10,7 +8,8 @@
     - debug-tunnel-var
     - pgsql-all
     - pgsql-deploy-schema
-
+    -
+# Set file paths for database schema files
 - name: set name for the shard's sql file
   set_fact:
     local_db_schema: "{{ schema_path }}/{{ schema_path_suffix }}/{{ corezoid_release }}/init/cp.sql"
@@ -21,6 +20,7 @@
     - pgsql-all
     - pgsql-deploy-schema
 
+# Deploy schema file to remote host when needed
 - name: deploy schema files to remote host
   copy:
     src: "{{ local_db_schema }}"
@@ -30,40 +30,33 @@
     mode: 0644
   when:
     - not ssh_tunnel
-    - not aws_rds
   tags:
     - pgsql-all
     - pgsql-deploy-schema
 
-# "{{ (ssh_tunnel) | ternary("{{ local_db_schema }}","{{ remote_db_schema }}") }}"
-- name: set schema name for ssh_tunnel
+# Show final schema path
+- name: Set schema path
   set_fact:
-    db_schema: "{{ ssh_tunnel | ternary(local_db_schema,remote_db_schema) }}"
+    db_schema: "{{ remote_db_schema }}"
   tags:
     - debug-tunnel-var
     - pgsql-all
     - pgsql-deploy-schema
 
-- name: set schema name for ssh_tunnel
-  set_fact:
-    db_schema: "{{ aws_rds | ternary(local_db_schema,remote_db_schema) }}"
-  tags:
-    - debug-tunnel-var
-    - pgsql-all
-    - pgsql-deploy-schema
-
+# Show final schema path
 - debug: msg={{ db_schema }}
 
+# Checks if any tables exist in the database to avoid redeploying schema
 - name: ensure tables exist in {{ local_db }}
   become: yes
   become_user: postgres
-  # sudo_user: postgres
   shell: psql -p {{ db_main.port }} -U postgres {{ local_db }} -Atc "SELECT COUNT(1) FROM pg_stat_user_tables"
   register: check_db_tables
   tags:
     - pgsql-all
     - pgsql-deploy-schema
 
+# Executes SQL schema file to deploy database structure if database is empty
 - name: deploy db schema for {{ local_db }}
   become: yes
   become_user: postgres
@@ -76,6 +69,8 @@
     - pgsql-all
     - pgsql-deploy-schema
 
+
+# Sets up appropriate access permissions for different user roles
 - name: grant privileges on all tables in {{ local_db }}
   postgresql_privs: >
     db={{ local_db }}
@@ -95,6 +90,7 @@
     - pgsql-all
     - pgsql-deploy-schema
 
+# Verifies if the initial payment plan exists in the conveyor database
 - name: check the trial payment plan exists
   become: yes
   become_user: postgres
@@ -108,10 +104,7 @@
     - pgsql-deploy-schema
     - pgsql-deploy-schema-trial
 
-# - debug: msg={{ check_payment_plan }}
-#   tags:
-#     - debug-payment-plan
-
+# Creates default trial payment plan if it doesn't exist
 - name: insert initial data
   become: yes
   become_user: postgres
@@ -125,8 +118,8 @@
     - pgsql-all
     - pgsql-deploy-schema
     - pgsql-deploy-schema-trial
-# - debug: var=hostvars[inventory_hostname]
 
+# Creates postgres_fdw extension for cross-database querying
 - name: create extension postgres_fdw
   become: yes
   become_user: postgres
@@ -137,6 +130,7 @@
     - pgsql-all
     - pgsql-deploy-schema
 
+# Creates pgcrypto extension and fixes duplicate UUID issues
 - name: create extension pgcrypto
   become: yes
   become_user: postgres
@@ -147,6 +141,7 @@
     - pgsql-all
     - pgsql-deploy-schema
 
+# Grants foreign data wrapper usage permission to the application user
 - name: GRANT postgres_fdw
   become: yes
   become_user: postgres
@@ -157,6 +152,7 @@
     - pgsql-all
     - pgsql-deploy-schema
 
+# Transfers ownership of the conveyor_fdw table to the application user
 - name: Alter table conveyor_fdw
   become: yes
   become_user: postgres
@@ -166,15 +162,3 @@
   tags:
     - pgsql-all
     - pgsql-alter-table-conveyor_fdw
-
-# - name: Add extensions cascade
-#   community.general.postgresql_ext:
-#     name: "{{ item }}"
-#     db: "{{ local_db }}"
-#     cascade: true
-#   with_items:
-#     - "pg_repack"
-#     - "pgstattuple"
-#   tags:
-#     - pgsql-all
-#     - pgsql-extensions

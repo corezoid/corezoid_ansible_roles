@@ -1,3 +1,4 @@
+# Set default cron schedule for database maintenance if not defined
 - name: set minute for cron clean tasks archive
   set_fact: tasks_archive_cron_minute=0
   when: tasks_archive_cron_minute is not defined
@@ -6,6 +7,7 @@
     - postgresql-maintenance
     - postgresql-maintenance-cron
 
+# Set default hour for database cleanup tasks
 - name: set hour for cron clean tasks archive
   set_fact: tasks_archive_cron_hour=20
   when: tasks_archive_cron_hour is not defined
@@ -14,6 +16,7 @@
     - postgresql-maintenance
     - postgresql-maintenance-cron
 
+# Set default weekday for database cleanup tasks (run every day)
 - name: set weekday for cron clean tasks archive
   set_fact: tasks_archive_cron_weekday="*"
   when: tasks_archive_cron_weekday is not defined
@@ -22,36 +25,14 @@
     - postgresql-maintenance
     - postgresql-maintenance-cron
 
+# Clean YUM cache before package installation
 - name: Yum clean all
   command: yum clean all
   tags:
     - postgresql-all
     - postgresql-install-packages
 
-#- name: Install centos-release-scl for PostgreSQL 13 packages
-#  yum:
-#    name: "{{ item }}"
-#    state: present
-#    update_cache: yes
-#  with_items:
-#    - centos-release-scl
-#  when:
-#    - ansible_distribution != "Amazon"
-#    - pgdg13 is defined
-#  tags:
-#    - postgresql-all
-#    - postgresql-install-packages
-#
-#- name: Copy postgresql repo
-#  copy:
-#    src: pgdg-redhat-all.repo
-#    dest: /etc/yum.repos.d/pgdg-redhat-all.repo
-##  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"   #Отключал когда инсталил на centos7, возможно на ami нужно будет включить, если включить тогда переделать when
-#  tags:
-#    - postgresql-all
-#    - postgresql-install-packages
-
-    
+# Configure Oracle Linux specific PostgreSQL repository
 - name: Copy postgresql repo Oracl Linux
   copy:
     src: oracllinux_pg13.repo
@@ -63,6 +44,7 @@
     - postgresql-all
     - postgresql-install-packages
 
+# Disable built-in PostgreSQL module on Oracle Linux 8
 - name: Disable PostgreSQL module using dnf command
   command: "dnf -y module disable postgresql"
   when:
@@ -72,17 +54,7 @@
     - postgresql-all
     - postgresql-install-packages
 
-#- name: Copy postgresql repo
-#  copy:
-#    src: pgdg-redhat-all-centos-8.repo
-#    dest: /etc/yum.repos.d/pgdg-redhat-all-centos-8.repo
-#  when:
-#    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS"
-#    - ansible_distribution_major_version == "8"
-#  tags:
-#    - postgresql-all
-#    - postgresql-install-packages
-
+# Install PostgreSQL packages for non-Amazon distributions
 - name: Install PostgreSQL packages
   yum: name={{ item }} state=present update_cache=yes
   with_items:
@@ -95,6 +67,7 @@
     - postgresql-all
     - postgresql-install-packages
 
+# Install PostgreSQL packages for Amazon Linux 2
 - name: Install PostgreSQL packages
   yum: name={{ item }} state=present update_cache=yes
   with_items:
@@ -106,6 +79,7 @@
     - postgresql-all
     - postgresql-install-packages
 
+# Install PostgreSQL packages for Amazon Linux 2023
 - name: Install PostgreSQL packages
   yum: name={{ item }} state=present update_cache=yes
   with_items:
@@ -117,6 +91,7 @@
     - postgresql-all
     - postgresql-install-packages
 
+# Enable PostgreSQL service on Amazon Linux 2023
 - name: enable postgresql to survive reboot
   service: name={{ item }} enabled=yes
   with_items:
@@ -126,6 +101,7 @@
     - postgresql-all
     - postgresql-install
 
+# Enable PostgreSQL service on Amazon Linux 2
 - name: enable postgresql to survive reboot
   service: name={{ item }} enabled=yes
   with_items:
@@ -135,6 +111,7 @@
     - postgresql-all
     - postgresql-install
 
+# Enable PostgreSQL service on other distributions
 - name: enable postgresql{{ db_ver }} to survive reboot
   service: name={{ item }} enabled=yes
   with_items:
@@ -144,6 +121,7 @@
     - postgresql-all
     - postgresql-install
 
+# Deploy PostgreSQL system configuration for service
 - name: Add config to /etc/sysconfig/pgsql/
   template:
     src: templates/sysconfig-postgresql.j2
@@ -153,6 +131,7 @@
     - postgresql-all
     - postgresql-install
 
+# Create top-level directory for PostgreSQL data
 - name: Creates top directory for postgres
   file:
     path: "{{ top_db_dir }}"
@@ -164,6 +143,7 @@
     - postgresql-all
     - postgresql-create-dirs
 
+# Create database directory with proper permissions
 - name: Creates db directory for postgres
   file:
     path: "{{ db_dir }}"
@@ -175,6 +155,7 @@
     - postgresql-all
     - postgresql-create-dirs
 
+# Configure sudo access for wheel group
 - name: ensure wheel group
   lineinfile:
     regexp: '# %wheel	ALL=(ALL)	NOPASSWD: ALL'
@@ -184,6 +165,7 @@
     - postgresql-all
     - postgresql-add-sudoers
 
+# Check if PostgreSQL data directory is already initialized
 - name: Check if PostgreSQL database is initialized.
   stat:
     path: "{{ db_dir }}/{{ db_version }}/data/PG_VERSION"
@@ -192,6 +174,7 @@
     - postgresql-all
     - postgresql-initdb
 
+# Initialize PostgreSQL database on non-Amazon distributions
 - name: Init DB
   become: true
   become_user: postgres
@@ -205,6 +188,7 @@
     - postgresql-all
     - postgresql-initdb
 
+# Install PostgreSQL Python driver for Amazon Linux 2
 - name: Install aws-psycopg2
   when:
     - not pgdata_dir_version.stat.exists
@@ -216,6 +200,7 @@
     - postgresql-all
     - postgresql-initdb
 
+# Initialize PostgreSQL database on Amazon Linux 2
 - name: Init DB AMI2
   become: true
   become_user: postgres
@@ -229,6 +214,7 @@
     - postgresql-all
     - postgresql-initdb
 
+# Initialize PostgreSQL database on Amazon Linux 2023
 - name: Init DB AMI3
   become: true
   become_user: postgres
@@ -242,6 +228,7 @@
     - postgresql-all
     - postgresql-initdb
 
+# Remove default PostgreSQL data directory
 - name: Delete default pgsql directory
   file:
     path: "/var/lib/pgsql"
@@ -252,6 +239,7 @@
     - postgresql-all
     - postgresql-create-dirs
 
+# Create symlink to custom PostgreSQL data directory
 - name: Create link to pgsql directory
   file:
     src: "{{ db_dir }}"
@@ -264,18 +252,21 @@
     - postgresql-all
     - postgresql-create-dirs
 
+# Deploy PostgreSQL user environment settings
 - name: Add .bashrc file
   template: src=templates/bashrc.j2 dest={{ db_dir }}/.bashrc mode=0660 owner=postgres
   tags:
     - postgresql-all
     - postgresql-create-files
 
+# Configure PostgreSQL client authentication
 - name: Add pg_hba.conf
   template: src=templates/pg_hba-box.conf.j2 dest={{ db_dir }}/{{ db_version }}/data/pg_hba.conf mode=0700 owner=postgres
   tags:
     - postgresql-all
     - postgresql-config-files
 
+# Configure PostgreSQL main settings
 - name: Add postgresql.conf
   template:
     src: "templates/postgresql-box-{{ db_version }}.conf.j2"
@@ -289,6 +280,7 @@
     - postgresql-all
     - postgresql-config-files
 
+# Start PostgreSQL service on non-Amazon distributions
 - name: Start database service
   service:
     name: "{{ item }}"
@@ -300,6 +292,7 @@
     - postgresql-all
     - postgresql-start-db
 
+# Start PostgreSQL service on Amazon Linux 2
 - name: Start database service AMI2
   block:
     - name: Reload systemctl
@@ -313,6 +306,7 @@
     - postgresql-all-333
     - postgresql-start-db
 
+# Start PostgreSQL service on Amazon Linux 2023
 - name: Start database service AMI3
   block:
     - name: Change Path
@@ -332,6 +326,7 @@
     - postgresql-all-333
     - postgresql-start-db
 
+# Create directory for maintenance scripts
 - name: Create scripts folder
   file:
     path: "{{ db_dir }}/scripts"
@@ -342,6 +337,7 @@
     - postgresql-all
     - postgresql-maintenance
 
+# Deploy database maintenance script
 - name: Add maintenance.sh
   template:
     src: "templates/maintenance.sh.j2"
@@ -353,6 +349,7 @@
     - postgresql-maintenance
     - postgresql-maintenance-file
 
+# Configure scheduled task for database cleanup
 - name: Add cron for cleaning DB
   cron:
     name: "clean history and archives"
@@ -366,6 +363,7 @@
     - postgresql-maintenance
     - postgresql-maintenance-cron
 
+# Configure scheduled task for task history cleanup
 - name: Add cron for cleaning tasks_history
   cron:
     name: "Clean history"

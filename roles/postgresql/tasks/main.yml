@@ -1,17 +1,19 @@
 ---
-
+# Add the PostgreSQL repository configuration
 - name: Add PostgreSQL Repo
   include: add_repo.yml
   tags:
     - pgsql-all
     - pgsql-init
 
+# Perform initial PostgreSQL installation and setup
 - name: First run
   include: install.yml
   tags:
     - pgsql-all
     - pgsql-init
 
+# Set appropriate psycopg2 package for Amazon Linux
 - name: Set psycopg2 package name for Amazon Linux
   set_fact:
     psycopg2_rpm: "python-psycopg2"
@@ -20,6 +22,7 @@
     - pgsql-all
     - pgsql-install-deps
 
+# Set appropriate psycopg2 package for RHEL/CentOS/OracleLinux 7 and 9
 - name: Set psycopg2 package name for RHEL/CentOS/OracleLinux 7
   set_fact:
     psycopg2_rpm: "python-psycopg2"
@@ -30,6 +33,7 @@
     - pgsql-all
     - pgsql-install-deps
 
+# Set appropriate psycopg2 package for RHEL/CentOS/OracleLinux 8
 - name: Set psycopg2 package name for RHEL/CentOS/OracleLinux 8
   set_fact:
     psycopg2_rpm: "python3-psycopg2"
@@ -40,12 +44,14 @@
     - pgsql-all
     - pgsql-install-deps
 
+# Display the selected psycopg2 package and distribution information
 - debug: msg="{{ psycopg2_rpm }} - {{ ansible_distribution }} - {{ ansible_distribution_major_version }}"
   tags:
     - pgsql-all
     - pgsql-install-deps
     - pgsql-install-deps-debug
 
+# Install the psycopg2 package with retry logic
 - name: Install packages psycopg2 for RHEL/CentOS/OracleLinux 7
   yum: name={{ item }} state=present update_cache=yes
   retries: 3
@@ -54,67 +60,27 @@
     - "{{ psycopg2_rpm }}"
   when:
     - psycopg2_rpm is defined
-  #   # - ansible_distribution == 'RedHat' or ansible_distribution == 'CentOS' or ansible_distribution == "OracleLinux"
-  #   # - ansible_distribution_major_version == "7"
   tags:
     - pgsql-all
     - pgsql-install-deps
 
-# - debug: msg="{{ init_db_host }} {{ db_main.port }} {{ db_superuser_login }} {{ db_superuser_password }}"
-#   tags:
-#     - pgsql-all
-#     - pgsql-create-roles-debug
+#- name: grant role to app user
+#  postgresql_privs: >
+#    login_host={{ db_main.host }}
+#    port={{ db_main.port  }}
+#    db=postgres
+#    type=group
+#    objs=appusers
+#    roles={{ db_app_user }}
+#    grant_option=no
+#    login_user={{ db_superuser_login }}
+#    login_password={{ db_superuser_password }}
+#  when: aws_rds
+#  tags:
+#    - pgsql-all
+#    - pgsql-grant-role-to-app-user
 
-# - name: Create general roles
-#   postgresql_user: >
-#     login_host={{ db_main.host }}
-#     port={{ db_main.port }}
-#     login_user={{ db_superuser_login }}
-#     login_password={{ db_superuser_password }}
-#     db=postgres
-#     name={{ item.name }}
-#     password=NULL
-#     role_attr_flags={{ item.role_attr }}
-#     encrypted=true
-#   with_items:
-#     - { name: "viewers", role_attr: "NOLOGIN" }
-#     - { name: "appusers", role_attr: "NOLOGIN" }
-#   when: aws_rds
-#   tags:
-#     - pgsql-all
-#     - pgsql-create-roles
-
-# - name: create app user
-#   postgresql_user: >
-#     login_host={{ db_main.host }}
-#     port={{ db_main.port  }}
-#     db=postgres
-#     name={{ db_app_user }}
-#     password={{ db_app_user_pass }}
-#     login_user={{ db_superuser_login }}
-#     login_password={{ db_superuser_password }}
-#     encrypted=yes
-#   when: aws_rds
-#   tags:
-#     - pgsql-all
-#     - pgsql-create-app-user
-
-- name: grant role to app user
-  postgresql_privs: >
-    login_host={{ db_main.host }}
-    port={{ db_main.port  }}
-    db=postgres
-    type=group
-    objs=appusers
-    roles={{ db_app_user }}
-    grant_option=no
-    login_user={{ db_superuser_login }}
-    login_password={{ db_superuser_password }}
-  when: aws_rds
-  tags:
-    - pgsql-all
-    - pgsql-grant-role-to-app-user
-
+# Create base roles for application access management
 - name: Create general roles
   postgresql_user: >
     port={{ db_main.port }}
@@ -125,11 +91,11 @@
   with_items:
     - { name: "viewers", role_attr: "NOLOGIN" }
     - { name: "appusers", role_attr: "NOLOGIN" }
-  when: not aws_rds
   tags:
     - pgsql-all
     - pgsql-create-roles
 
+# Create main application user
 - name: Create app user
   postgresql_user: >
     port={{ db_main.port }}
@@ -137,11 +103,11 @@
     name={{ db_app_user }}
     password={{ db_app_user_pass_enc }}
     encrypted=yes
-  when: not aws_rds
   tags:
     - pgsql-all
     - pgsql-create-app-user
 
+# Create foreign data wrapper user
 - name: Create fdw_user
   postgresql_user: >
     port={{ db_main.port }}
@@ -149,42 +115,29 @@
     name={{ db_fdw_user }}
     password={{ db_fdw_user_pass_enc }}
     encrypted=yes
-  when: not aws_rds
   tags:
     - pgsql-all
     - pgsql-create-fdw-user
 
+# Grant appropriate role to application user
 - name: Grant role to app user
   become: yes
   become_user: postgres
   shell: psql -p {{ db_main.port }} postgres -U postgres -Atc "GRANT appusers TO {{ db_main.user }};"
-  when: not aws_rds
   tags:
     - pgsql-all
     - pgsql-grant-role-to-app-user
 
+# Grant appropriate role to fdw user
 - name: Grant role to fdw user
   become: yes
   become_user: postgres
   shell: psql -p {{ db_main.port }} postgres -U postgres -Atc "GRANT appusers TO {{ db_fdw_user }};"
-  when: not aws_rds
   tags:
     - pgsql-all
     - pgsql-grant-role-to-app-user
 
-# - name: create superuser
-#   postgresql_user: >
-#     db=postgres
-#     name={{ item.name }}
-#     password={{ item.pass }}
-#     role_attr_flags={{ item.role_attr }}
-#     login_host={{ db_main.host }}
-#     port={{ db_main.port }}
-#     login_user={{ db_superuser_login }}
-#     login_password={{ db_superuser_password }}
-#   with_items:
-#     - { name: "superpuperuser", role_attr: "SUPERUSER,CREATEDB,INHERIT,LOGIN", pass: "superpupersecret" }
-
+# Create main system and application databases
 - name: Create main dbs
   postgresql_db: >
     name={{ item }}
@@ -203,6 +156,7 @@
     - pgsql-all
     - pgsql-create-main-dbs
 
+# Set ownership for specific databases
 - name: Change owner accounts database
   postgresql_db: >
     name={{ item }}
@@ -215,6 +169,7 @@
     - pgsql-all
     - pgsql-create-main-dbs
 
+# Create shard databases with numeric suffixes
 - name: Create shards db
   postgresql_db: >
     name=cp{{ item }}
@@ -225,6 +180,7 @@
     - pgsql-all
     - pgsql-create-shard-dbs
 
+# Deploy schema to main application databases
 - name: Deploy db schema for main db
   include: create_db_from_schema.yml local_db={{ outer_item }}
   with_items:
@@ -243,7 +199,7 @@
     - pgsql-all
     - pgsql-deploy-main-schema
 
-
+# Deploy schema to shard databases
 - name: Deploy db schema for shards db
   include: create_db_from_schema.yml local_db=cp{{ outer_item }}
   with_items: '{{ real_db_numbers }}'
@@ -255,6 +211,7 @@
     - pgsql-all
     - pgsql-deploy-shards-schema
 
+#  Configure foreign data wrapper for shard databases
 - name: Deploy db schema from_postgres_fdw
   include: create_db_from_postgres_fdw.yml local_db=cp{{ outer_item }}
   with_items: '{{ real_db_numbers }}'
@@ -266,28 +223,7 @@
     - pgsql-all
     - pgsql-deploy-shards-schema
 
-
-# TODO rebuild this method to apply diff between versions
-# - name: apply shards ddl
-#   include: apply_ddl.yml local_db=cp{{ outer_item }} ddl_file="shards_diff.sql"
-#   with_items: '{{ real_db_numbers }}'
-#   loop_control:
-#     loop_var: outer_item
-#   tags:
-#     - pgsql-all
-#     - pgsql-apply-shards-ddl
-
-# # TODO rebuild this method to apply diff between versions
-# - name: apply conveyor ddl
-#   include: apply_ddl.yml local_db={{ outer_item }} ddl_file="conveyor_diff.sql"
-#   loop_control:
-#     loop_var: outer_item
-#   with_items:
-#     - conveyor
-#   tags:
-#     - pgsql-all
-#     - pgsql-apply-conveyor-ddl
-
+# Create viewer users for database monitoring
 - name: Create viewer users
   include: add_users_to_viewers.yml viewer_user={{ outer_item }}
   with_items:
@@ -298,31 +234,7 @@
     - pgsql-all
     - pgsql-create-viewers
 
-# - name: Init PostgreSQL Diff for main DBs
-#   include: diff.yml local_db={{ outer_item }}
-#   with_items:
-#     - conveyor
-#     - cce
-#     - health_check
-#     - conveyor_statistics
-#     - git_call
-#     - settings
-#     - limits
-#   loop_control:
-#     loop_var: outer_item
-#   tags:
-#     - pgsql-all
-#     - pgsql-diff
-
-# - name: Init PostgreSQL Diff for Shards DBs
-#   include: diff.yml local_db=cp{{ outer_item }}
-#   with_items: '{{ real_db_numbers }}'
-#   loop_control:
-#     loop_var: outer_item
-#   tags:
-#     - pgsql-all
-#     - pgsql-diff
-
+# Configure connection pooling with PgBouncer
 - name: Init PgBouncer
   include: pgbouncer.yml
   tags:
