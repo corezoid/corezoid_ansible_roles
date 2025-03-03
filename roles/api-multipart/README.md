@@ -1,38 +1,97 @@
-Role Name
-=========
+# Conveyor API Multipart Role
 
-A brief description of the role goes here.
+This Ansible role installs and configures the `conveyor_api_multipart` service for the Corezoid platform.
 
-Requirements
-------------
+## Overview
 
-Any pre-requisites that may not be covered by Ansible itself or the role should be mentioned here. For instance, if the role uses the EC2 module, it may be a good idea to mention in this section that the boto package is required.
+The role performs the following main functions:
+- Installs the conveyor_api_multipart package from a designated repository
+- Creates necessary directories with appropriate permissions
+- Configures the application with a secure configuration file
+- Sets up the service to start automatically
+- Configures Monit for service monitoring
 
-Role Variables
---------------
+## Requirements
 
-A description of the settable variables for this role should go here, including any variables that are in defaults/main.yml, vars/main.yml, and any variables that can/should be set via parameters to the role. Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.) should be mentioned here as well.
+- RHEL/CentOS 7/8/9 or Amazon Linux 2/2023
+- Access to the AWS Corezoid repository
+- Monit should be installed on the target system
 
-Dependencies
-------------
+## Role Variables
 
-A list of other roles hosted on Galaxy should go here, plus any details in regards to parameters that may need to be set for other roles, or variables that are used from other roles.
+### Required Variables for box.yml
 
-Example Playbook
-----------------
+```yaml
+top_dir: "/ebsmnt"
+conf_dir: "{{ top_dir }}/conf"
+app_user: "app-user"
 
-Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
+api_mult_nginx: true
+api_mult_version: "{{ corezoid_release_app_version.mult }}"
+api_mult_config: "{{ conf_dir }}/conveyor_api_multipart.config"
+api_mult_port: 9082
+api_mult_file_storage: "f3"
+api_mult_file_f3_path_to_dir: "/ebsmnt_share"
+api_mult_ttl_file: 60
+api_mult_cluster_port: 5567
+api_mult_login_id: 3
+api_mult_login_secret: "z2JUCu7j8LS7lKR3V0mYrtVuFcdzo3XSZgLVqjctCzlmqOoSOA"
+mult_hosts:
+  - { host: "10.70.0.12" }
+```
 
-    - hosts: servers
-      roles:
-         - { role: username.rolename, x: 42 }
+## Templates
 
-License
--------
+The role requires the following templates:
+- `templates/[corezoid_release]-conveyor_api_multipart.config.j2` - Main application configuration
+- `templates/conveyor_api_multipart.monit.j2` - Monit monitoring configuration
 
-BSD
+## Example Playbook
 
-Author Information
-------------------
+```yaml
+ - hosts: cz_mult
+   become: true
+   vars_files:
+     - vars/box.yml
+     - vars/box-credentials.yml
+   roles:
+     - role: api-multipart
+```
 
-An optional section for the role authors to include contact information, or a website (HTML is not allowed).
+## Role Structure
+
+```
+redis/
+├── defaults/
+│   └── main.yml          # Default variables   
+├── handlers/
+│   └── main.yml          # Event handlers
+├── meta/
+│   └── main.yml          # Role metadata
+├── tasks/
+│   └── main.yml          # Main tasks
+├── templates/
+│   ├── *-conveyor_api_multipart.config.j2    # Configuration templates
+│   └── conveyor_api_multipart.monit.j2         # Monit configuration template
+└── vars/
+    └── main.yml          # Internal variables
+```
+
+## Tags
+
+You can use the following tags to run specific parts of the role:
+
+- `api-multipart-all` - Run all tasks
+- `api-multipart-install` - Just install the package
+- `api-multipart-env` - Set up directories
+- `api-multipart-config` - Update configuration
+- `api-multipart-monit` - Update Monit configuration
+
+Example:
+```
+ansible-playbook -i inventory playbook.yml --tags "api-multipart-config"
+```
+
+## Author
+
+Created and maintained by Middleware
