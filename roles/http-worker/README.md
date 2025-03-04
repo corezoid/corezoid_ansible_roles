@@ -1,38 +1,102 @@
-Role Name
-=========
+# HTTP Worker Role
 
-A brief description of the role goes here.
+This Ansible role installs and configures the `http-worker` service for the Corezoid platform.
 
-Requirements
-------------
+## Overview
 
-Any pre-requisites that may not be covered by Ansible itself or the role should be mentioned here. For instance, if the role uses the EC2 module, it may be a good idea to mention in this section that the boto package is required.
+The role performs the following main functions:
+- Installs the http-worker package from the AWS Corezoid repository
+- Creates necessary directories with appropriate permissions
+- Configures the application with a secure configuration file
+- Configures Monit for service monitoring
+- Sets up worker ID rotation for autoscale environments
 
-Role Variables
---------------
+## Requirements
 
-A description of the settable variables for this role should go here, including any variables that are in defaults/main.yml, vars/main.yml, and any variables that can/should be set via parameters to the role. Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.) should be mentioned here as well.
+- RHEL/CentOS 7/8/9 or Amazon Linux 2/2023
+- Access to the AWS Corezoid repository
+- Monit should be installed on the target system
 
-Dependencies
-------------
+## Role Variables
 
-A list of other roles hosted on Galaxy should go here, plus any details in regards to parameters that may need to be set for other roles, or variables that are used from other roles.
+### Required Variables for box.yml
 
-Example Playbook
-----------------
+```yaml
+top_dir: "/ebsmnt"
+conf_dir: "{{ top_dir }}/conf"
+app_user: "app-user"
 
-Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
+corezoid_release: 6.7.3
 
-    - hosts: servers
-      roles:
-         - { role: username.rolename, x: 42 }
+corezoid_release_app_version:
+  http_worker: "4.2.1.2"
 
-License
--------
+http_worker:
+  version: "{{ corezoid_release_app_version.http_worker }}"
+  config: "{{ conf_dir }}/http_worker.config"
 
-BSD
+#http-worker settings
+http_worker_max_http_resp_size: 5242880
+http_worker_max_keep_alive_connections_len: 0
+http_worker_pgsql_min_size: 0
 
-Author Information
-------------------
+rmq_logs: false
+```
 
-An optional section for the role authors to include contact information, or a website (HTML is not allowed).
+## Templates
+
+The role requires the following templates:
+- `templates/[corezoid_release]-http_worker.config.j2` - Main application configuration
+- `templates/http-worker.monit.j2` - Monit monitoring configuration
+
+## Example Playbook
+
+```yaml
+- hosts: cz_http
+  become: true
+  vars_files:
+    - vars/box.yml
+    - vars/box-credentials.yml
+  roles:
+    - role: http-worker
+```
+
+## Role Structure
+
+```
+http-worker/
+├── defaults/
+│   └── main.yml          # Default variables   
+├── handlers/
+│   └── main.yml          # Event handlers
+├── meta/
+│   └── main.yml          # Role metadata
+├── tasks/
+│   └── main.yml          # Main tasks
+├── templates/
+│   ├── *-http_worker.config.j2    # Configuration templates
+│   └── http-worker.monit.j2       # Monit configuration template
+└── vars/
+    └── main.yml          # Internal variables
+```
+
+## Tags
+
+You can use the following tags to run specific parts of the role:
+
+- `http-worker-all` - Run all tasks
+- `http-worker-install` - Just install the package
+- `http-worker-config` - Update configuration files
+- `http-worker-config-file` - Update only the main config file
+- `http-worker-start` - Start the service
+- `http-worker-monit` - Update Monit configuration
+
+
+Example:
+```
+ansible-playbook -i inventory playbook.yml --tags "http-worker-config"
+```
+
+## Author
+
+Created and maintained by Middleware

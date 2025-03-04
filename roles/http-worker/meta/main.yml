@@ -1,16 +1,19 @@
 galaxy_info:
-  author: Vinokurov Andrey
+  author: Ozerov Vladymyr
   description: Http-worker application deployment
   company: Middleware Inc.
   license: commercial license
-  min_ansible_version: 2.0
+  min_ansible_version: 2.13.5
   platforms:
-    - name: EL
+    - name: EL  # Enterprise Linux (RedHat/CentOS)
       versions:
-        - 7
+        - "7"
+        - "8"
+        - "9"
     - name: Amazon
       versions:
-        - 2018.03
+        - "2"
+        - "2023"
   # Optionally specify the branch Galaxy will use when accessing the GitHub
   # repo for this role. During role install, if no tags are available,
   # Galaxy will use this branch. During import Galaxy will access files on

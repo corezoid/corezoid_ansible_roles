@@ -338,7 +338,7 @@
   {lager, [
     %% What handlers to install with what arguments (wrapped by middleman)
 
-    {log_root, "{{ top_dir }}/erlang/{{ item }}/log"},
+    {log_root, "{{ top_dir }}/erlang/{{ service_name }}/log"},
     {handlers, [
         {lager_console_backend, [{level, info}]},
         {lager_file_backend, [{file, "error.log"}, {level, error}, {size, 734003200}, {date, "$D0"}, {count, 5}]},
