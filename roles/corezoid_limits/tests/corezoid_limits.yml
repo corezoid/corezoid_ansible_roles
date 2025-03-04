@@ -1,11 +1,6 @@
-package:
-  corezoid_limits:
-    installed: true
-    versions:
-      - {{ corezoid_release_app_version.corezoid_limits }}
+- hosts: localhost
+  remote_user: root
+  roles:
+    - roles/corezoid_limits
 
-service:
-  corezoid_limits:
-    enabled: true
-    running: true
 

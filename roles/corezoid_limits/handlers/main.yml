@@ -1,10 +1,3 @@
 ---
 # handlers file for corezoid_limits
-- name: restart corezoid_limits
-  service: name=corezoid_limits state=restarted enabled=yes
 
-- name: stop corezoid_limits
-  service: name=corezoid_limits state=stopped enabled=yes
-
-- name: start corezoid_limits
-  service: name=corezoid_limits state=started enabled=yes
