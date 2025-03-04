@@ -1,5 +1,5 @@
 - hosts: localhost
   remote_user: root
   roles:
-    - roles/conf_agent_serve
+    - roles/conf_agent_server
 
