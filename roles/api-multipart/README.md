@@ -26,6 +26,11 @@ top_dir: "/ebsmnt"
 conf_dir: "{{ top_dir }}/conf"
 app_user: "app-user"
 
+corezoid_release: 6.7.3
+
+corezoid_release_app_version:
+  mult: "3.3.1.2"
+
 api_mult_nginx: true
 api_mult_version: "{{ corezoid_release_app_version.mult }}"
 api_mult_config: "{{ conf_dir }}/conveyor_api_multipart.config"
