@@ -1,38 +1,102 @@
-Role Name
-=========
+# Configuration Agent Server Role
 
-A brief description of the role goes here.
+This Ansible role installs and configures the `conf_agent_server` service for the Corezoid platform.
 
-Requirements
-------------
+## Overview
 
-Any pre-requisites that may not be covered by Ansible itself or the role should be mentioned here. For instance, if the role uses the EC2 module, it may be a good idea to mention in this section that the boto package is required.
+The role performs the following main functions:
+- Installs the conf_agent_server package from the AWS Corezoid repository
+- Creates necessary directories with appropriate permissions
+- Configures the application with a secure configuration file
+- Sets up the service to start automatically
+- Configures Monit for service monitoring
 
-Role Variables
---------------
+## Requirements
 
-A description of the settable variables for this role should go here, including any variables that are in defaults/main.yml, vars/main.yml, and any variables that can/should be set via parameters to the role. Any variables that are read from other roles and/or the global scope (ie. hostvars, group vars, etc.) should be mentioned here as well.
+- RHEL/CentOS 7/8/9 or Amazon Linux 2/2023
+- Access to the AWS Corezoid repository
+- Monit should be installed on the target system
 
-Dependencies
-------------
+## Role Variables
 
-A list of other roles hosted on Galaxy should go here, plus any details in regards to parameters that may need to be set for other roles, or variables that are used from other roles.
+### Required Variables for box.yml
 
-Example Playbook
-----------------
+```yaml
+top_dir: "/ebsmnt"
+conf_dir: "{{ top_dir }}/conf"
+app_user: "app-user"
 
-Including an example of how to use your role (for instance, with variables passed in as parameters) is always nice for users too:
+corezoid_release: 6.7.3
 
-    - hosts: servers
-      roles:
-         - { role: username.rolename, x: 42 }
+corezoid_release_app_version:
+  conf_agent_server: "2.7.1"
 
-License
--------
+conf_agent_server:
+  version: "{{ corezoid_release_app_version.conf_agent_server }}"
+  config: "{{ conf_dir }}/conf_agent_server.config"
+conf_agent_server_config: "{{ conf_dir }}/conf_agent_server.config"
+```
 
-BSD
+## Directory Structure
 
-Author Information
-------------------
+```
+conf_agent_server/
+├── defaults/          # Default variables
+├── handlers/          # Handler definitions
+├── meta/              # Role metadata
+├── README.md          # This documentation file
+├── tasks/             # Task definitions
+│   └── main.yml       # Main tasks file
+├── templates/         # Configuration templates
+│   ├── *-conf_agent_server.config.j2
+│   └── conf_agent_server.monit.j2
+├── tests/             # Test files
+└── vars/              # Role variables
+```
 
-An optional section for the role authors to include contact information, or a website (HTML is not allowed).
+## Role Variables
+
+The role uses several variables that should be defined:
+
+- `app_user`: The user that will own and run the service
+- `top_dir`: Top-level directory for Erlang applications
+- `conf_dir`: Directory for configuration files
+- `conf_agent_server_config`: Path to the configuration file
+- `corezoid_release`: Version of Corezoid release (e.g., "6.7.3")
+- `corezoid_release_app_version.conf_agent_server`: Specific version of conf_agent_server to install
+
+## Tags
+
+The role uses the following tags for task control:
+
+- `conf_agent_server-all`: All tasks for this role
+- `conf_agent_server-app`: Application-related tasks
+- `conf_agent_server-install`: Installation tasks
+- `conf_agent_server-config`: Configuration tasks
+- `conf_agent_server-config-file`: Configuration file generation
+- `conf_agent_server-start`: Service start tasks
+- `conf_agent_server-monit`: Monitoring configuration tasks
+
+## Usage Example
+
+Include this role in your playbook:
+
+```yaml
+ - hosts: cz_api
+   become: true
+   vars_files:
+     - vars/box.yml
+     - vars/box-credentials.yml
+   roles:
+     - role: conf_agent_server
+```
+
+To run only specific tasks, use tags:
+
+```bash
+ansible-playbook playbook.yml --tags "conf_agent_server-config"
+```
+
+## Author
+
+Created and maintained by Middleware

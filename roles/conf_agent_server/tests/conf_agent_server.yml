@@ -1,15 +1,5 @@
-package:
-  conf_agent_server:
-    installed: true
-    versions:
-      - {{ corezoid_release_app_version.conf_agent_server }}
+- hosts: localhost
+  remote_user: root
+  roles:
+    - roles/conf_agent_serve
 
-service:
-  conf_agent_server:
-    enabled: true
-    running: true
-
-addr:
-  tcp://127.0.0.1:{{ conf_agent_server_port }}:
-    reachable: true
-    timeout: 500

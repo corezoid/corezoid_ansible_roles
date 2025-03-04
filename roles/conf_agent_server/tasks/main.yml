@@ -1,9 +1,15 @@
+# Set service name as a fact for consistent usage
+- name: Set service name variable
+  set_fact:
+    service_name: "conf_agent_server"
+  tags:
+    - conf_agent_server-all
+    - conf_agent_server-app
+
 # Clean YUM cache to ensure fresh package metadata
 # Removes all cached package data to prevent installation issues
 - name: Yum clean all
   command: yum clean all
-  #  args:
-  #    warn: false
   tags:
     - conf_agent_server-all
     - conf_agent_server-app
@@ -13,100 +19,56 @@
 # Installs or updates the conf_agent_server package from AWS Corezoid repository with specific version
 - name: Install package conf_agent_server
   yum:
-    name: "{{ item }}"
+    name: "{{ service_name }}-{{ corezoid_release_app_version.conf_agent_server }}"
     state: present
     update_cache: yes
     disablerepo: "*"
     enablerepo: "aws-corezoid"
-  with_items:
-    - conf_agent_server-{{ corezoid_release_app_version.conf_agent_server }}
   tags:
     - conf_agent_server-all
     - conf_agent_server-app
     - conf_agent_server-install
 
-# Create log directory for Configuration Agent Server
-# Sets up a secure directory for application logs with restricted permissions
-- name: add log directory
-  file: path={{ top_dir }}/erlang/{{ item }}/log owner={{ app_user }} group={{ app_user }} state=directory mode=0700
-  with_items:
-    - conf_agent_server
-  tags:
-    - conf_agent_server-all
-    - conf_agent_server-app
-    - conf_agent_server-install
-
-# Set secure permissions for application directory
-# Ensures all Configuration Agent Server files have proper ownership and restricted access
-- name: fix permission
+# Create all required directories in a single task using a loop
+- name: Create application directories
   file:
-    path: "{{ top_dir }}/erlang/{{ item }}"
-    owner: "{{ app_user }}"
-    group: "{{ app_user }}"
+    path: "{{ item.path }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
     state: directory
-    mode: '0700'
-    recurse: yes
-  with_items:
-    - conf_agent_server
+    mode: "{{ item.mode }}"
+    recurse: "{{ item.recurse }}"
+  loop:
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}/log", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0700", recurse: no }
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0700", recurse: yes }
+    - { path: "{{ conf_dir }}", owner: "root", group: "root", mode: "0755", recurse: no }
   tags:
     - conf_agent_server-all
-    - conf_agent_server-app
     - conf_agent_server-install
+    - conf_agent_server-config
+
 
 # Generate Configuration Agent Server config file
 # Creates the application configuration file from template with proper settings
 - name: Create conf_agent_server config file
-  template:
-    src: "templates/{{ corezoid_release }}-{{ item }}.config.j2"
-    dest: "{{ conf_agent_server_config }}"
-  with_items:
-    - conf_agent_server
+  template: src=templates/{{ corezoid_release }}-{{ service_name }}.config.j2 dest={{ conf_agent_server_config }} owner={{ app_user }} group={{ app_user }} mode=0500
   tags:
     - conf_agent_server-all
     - conf_agent_server-app
     - conf_agent_server-config-file
 
-# Set secure permissions for configuration file
-# Restricts access to the configuration file for security on non-localhost systems
-- name: Fix permission to conf_agent_server.config file
-  file: state=file path={{ conf_agent_server_config }} owner={{ app_user }} group={{ app_user }} mode=0500
-  with_items:
-    - conf_agent_server
-  when: ansible_host != "127.0.0.1"
-  tags:
-    - conf_agent_server-all
-    - conf_agent_server-app
-    - conf_agent_server-config-file
-
-# Configure systemd service
-# Sets up systemd service configuration for automatic process management
-- name: Setup app systemd
-  template: src=templates/{{ item }}.service.j2 dest=/etc/systemd/system/{{ item }}.service owner=root group=root mode=0644
-  with_items:
-    - conf_agent_server
-  tags:
-    - conf_agent_server-all
-    - conf_agent_server-app
-    - conf_agent_server-systemd
-  when:
-    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
 # Enable and start Configuration Agent Server service
 # Ensures the service starts automatically on boot and is running
 - name: Enable conf_agent_server to survive reboot
   service:
-    name: "{{ item }}"
+    name: "{{ service_name }}"
     enabled: yes
     state: started
-    # no_block: yes
-  with_items:
-    - conf_agent_server
   tags:
     - conf_agent_server-all
     - conf_agent_server-app
-    - conf_agent_server-initd
-    - conf_agent_server-initd-start
+    - conf_agent_server-start
 
 # Create Monit monitoring configuration
 # Sets up monitoring for the Configuration Agent Server service
