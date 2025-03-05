@@ -1,104 +1,79 @@
 ---
 #-------------corezoid_api_sync-------------#
 
+# Set service name as a fact for consistent usage
+- name: Set service name variable
+  set_fact:
+    service_name: "corezoid_api_sync"
+  tags:
+    - corezoid_api_sync-all
+
+# Clean YUM cache to ensure fresh package metadata
+# Removes all cached package data to prevent installation issues
+- name: Yum clean all
+  command: yum clean all
+  tags:
+    - corezoid_api_sync-all
+    - corezoid_api_sync-install
+    - corezoid_api_sync-nginx-setup
+    - corezoid_api_sync-nginx-package
+
 # Install Corezoid API Sync package
 # Installs or updates the sync API package from AWS Corezoid repository with specific version
 - name: Install packages
   yum:
-    name: "{{ item }}"
+    name: "{{ service_name }}-{{ corezoid_release_app_version.sync_api }}"
     state: present
     update_cache: yes
     disablerepo: "*"
     enablerepo: "aws-corezoid"
-  with_items:
-    - corezoid_api_sync-{{ corezoid_release_app_version.sync_api }}
   tags:
     - corezoid_api_sync-all
     - corezoid_api_sync-app
     - corezoid_api_sync-install
 
-# Create log directory for API Sync
-# Sets up a secure directory for application logs with restricted permissions
-- name: add log directory
-  file: path={{ top_dir }}/erlang/{{ item }}/log owner={{ app_user }} group={{ app_user }} state=directory mode=0700
-  with_items:
-    - "corezoid_api_sync"
+# Create all required directories in a single task using a loop
+- name: Create application directories
+  file:
+    path: "{{ item.path }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    state: directory
+    mode: "{{ item.mode }}"
+    recurse: "{{ item.recurse }}"
+  loop:
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}/log", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0700", recurse: no }
+    - { path: "{{ conf_dir }}", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0500", recurse: no }
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0700", recurse: yes }
   tags:
     - corezoid_api_sync-all
-    - corezoid_api_sync-app
     - corezoid_api_sync-install
-
-# Set secure permissions for application directory
-# Ensures all API Sync files have proper ownership and restricted access
-- name: fix permission
-  file: path={{ top_dir }}/erlang/{{ item }} owner={{ app_user }} group={{ app_user }} state=directory mode=0700 recurse=yes
-  with_items:
-    - "corezoid_api_sync"
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-app
-    - corezoid_api_sync-install
-
-# Create configuration directory
-# Sets up a secure directory for storing application configuration
-- name: Make config folder
-  file: path={{ conf_dir }} owner={{ app_user }} group={{ app_user }} state=directory mode=0500
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-app
     - corezoid_api_sync-config
 
 # Generate API Sync configuration
 # Creates the main configuration file from template
+#If there is an error, please add it
+# with_items:
+#    - corezoid_api_sync
 - name: Create corezoid_api_sync.config file
-  template: src=templates/{{ corezoid_release }}-{{ item }}.config.j2 dest={{ corezoid_api_sync.config }}
-  with_items:
-    - corezoid_api_sync
+  template: src=templates/{{ corezoid_release }}-{{ service_name }}.config.j2 dest={{ corezoid_api_sync.config }} owner={{ app_user }} group={{ app_user }} mode=0500
   tags:
     - corezoid_api_sync-all
     - corezoid_api_sync-app
     - corezoid_api_sync-config
     - corezoid_api_sync-config-file
-
-# Set secure permissions for configuration file
-# Restricts access to the configuration file for security on non-localhost systems
-- name: Fix permission to config file
-  file: state=file path={{ corezoid_api_sync.config }} owner={{ app_user }} group={{ app_user }} mode=0500
-  with_items:
-    - corezoid_api_sync
-  when: ansible_host != "127.0.0.1"
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-app
-    - corezoid_api_sync-config
-    - corezoid_api_sync-config-file
-
-# Configure systemd service
-# Sets up systemd service configuration for automatic process management
-- name: Setup app systemd
-  template: src=templates/{{ item }}.service.j2 dest=/etc/systemd/system/{{ item }}.service owner=root group=root mode=0644
-  with_items:
-    - corezoid_api_sync
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-app
-    - corezoid_api_sync-initd
-  when: ansible_os_family == "RedHat" and ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
 
 # Enable and start API Sync service
 # Ensures the service starts automatically on boot and is running
 - name: Enable corezoid_api_sync to survive reboot
   service:
-    name: "{{ item }}"
+    name: "{{ service_name }}"
     enabled: yes
     state: started
-    # no_block: yes
-  with_items:
-    - corezoid_api_sync
   tags:
     - corezoid_api_sync-all
     - corezoid_api_sync-app
-    - corezoid_api_sync-initd
+    - corezoid_api_sync-start
 
 # Create Monit monitoring configuration
 # Sets up monitoring for the API Sync service
@@ -126,151 +101,89 @@
 
 #----------------NGINX-------------------
 
-# Clean YUM cache before Nginx installation
-# Ensures clean state for package installation
-- name: Yum clean all
-  command: yum clean all
-  #  args:
-  #    warn: false
+# Install Nginx web server and configure it for API Sync
+- name: Install and configure Nginx
+  block:
+    # Install Nginx web server
+    # Sets up the Nginx package from default repositories
+    - name: Install nGinx package
+      yum:
+        name: nginx
+        state: present
+        update_cache: yes
+      tags:
+        - corezoid_api_sync-nginx-package
+
+    # Create main Nginx configuration for Sync API
+    # Sets up the primary Nginx configuration for the Sync API service
+    - name: Create nGinx configurations
+      template:
+        src: "templates/{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { src: "{{ corezoid_release }}-01_syncapi.conf.j2", dest: "/etc/nginx/conf.d/syncapi-corezoid.conf", owner: "root", group: "root", mode: "0644" }
+        - { src: "upstream.conf.j2", dest: "/etc/nginx/conf.d/upstream-syncapi.conf", owner: "root", group: "root", mode: "0644" }
+        - { src: "status.conf.j2", dest: "/etc/nginx/conf.d/status.conf", owner: "root", group: "root", mode: "0644" }
+        - { src: "nginx.conf.j2", dest: "/etc/nginx/nginx.conf", owner: "root", group: "root", mode: "0600" }
+      tags:
+        - corezoid_api_sync-nginx-configs
+
+    # Setup SSL for Nginx
+    - name: Setup SSL for Nginx
+      block:
+        # Create SSL directory structure
+        - name: Create nGinx ssl dir
+          file:
+            path: "{{ nginx_ssl_dir }}"
+            owner: root
+            group: root
+            state: directory
+            mode: 0755
+
+        # Deploy SSL certificate
+        - name: Copy SSL certificate data
+          copy:
+            content: "{{ nginx_ssl_content }}"
+            dest: "{{ nginx_ssl_filename }}"
+            owner: "root"
+            group: "root"
+            mode: "0600"
+
+        # Configure SSL certificate settings
+        - name: Create nGinx ssl conf
+          template:
+            src: "templates/cert-corezoid.j2"
+            dest: "{{ nginx_ssl_dir }}/cert-corezoid"
+            owner: root
+            group: root
+            mode: 0600
+
+        # Create SSL certificate symlinks
+        - name: Create nGinx ssl links
+          file:
+            src: "{{ nginx_ssl_filename }}"
+            dest: "{{ nginx_ssl_dir }}/{{ item }}"
+            state: link
+          with_items:
+            - "corezoid.crt"
+            - "corezoid.key"
+      tags:
+        - corezoid_api_sync-nginx-setup-ssl
+
+    # Enable and start Nginx service
+    # Ensures Nginx starts on boot and is running
+    - name: Enable nGinx to survive reboot
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+      tags:
+        - corezoid_api_sync-nginx-system
   tags:
     - corezoid_api_sync-all
     - corezoid_api_sync-nginx-setup
-    - corezoid_api_sync-nginx-package
 
-# Install Nginx web server
-# Sets up the Nginx package from default repositories
-- name: Install nGinx package
-  yum:
-    name: "{{ item }}"
-    state: present
-    update_cache: yes
-  with_items:
-    - nginx
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-nginx-setup
-    - corezoid_api_sync-nginx-package
-
-# Configure Nginx for Sync API (commented section for custom Nginx+Lua)
-# - name: Upload nGinx+lua rpm
-#   copy:
-#     src: "{{ corezoid_api_sync_nginx.rpm_dir }}/nginx-1.14.2-1.el7_4.ngx.x86_64.rpm"
-#     dest: /tmp/nginx-1.14.2-1.el7_4.ngx.x86_64.rpm
-#   with_items:
-#     - el7
-#   tags:
-#     - corezoid_api_sync-all
-#     - corezoid_api_sync-nginx-setup
-#     - corezoid_api_sync-nginx-package
-
-# Create main Nginx configuration for Sync API
-# Sets up the primary Nginx configuration for the Sync API service
-- name: Create nGinx main configs
-  template: src=templates/{{ corezoid_release }}-{{ item }}.j2 dest=/etc/nginx/conf.d/syncapi-corezoid.conf owner=root group=root mode=0644
-  with_items:
-    - "01_syncapi.conf"
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-nginx-setup
-    - corezoid_api_sync-nginx-configs
-
-# Configure Nginx upstream servers
-# Sets up load balancing and backend server configurations
-- name: Create nGinx default configs
-  template: src=templates/{{ item }}.conf.j2 dest=/etc/nginx/conf.d/{{ item }}-syncapi.conf owner=root group=root mode=0644
-  with_items:
-    - "upstream"
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-nginx-setup
-    - corezoid_api_sync-nginx-configs
-
-# Configure Nginx status monitoring
-# Sets up status page for monitoring Nginx performance
-- name: Create nGinx default configs
-  template: src=templates/{{ item }}.j2 dest=/etc/nginx/conf.d/{{ item }} owner=root group=root mode=0644
-  with_items:
-    - "status.conf"
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-nginx-setup
-    - corezoid_api_sync-nginx-configs
-
-# Create SSL directory structure
-# Prepares secure directory for SSL certificates
-- name: Create nGinx ssl dir
-  file: path={{ nginx_ssl_dir }} owner=root group=root state=directory mode=0755
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-nginx-setup
-    - corezoid_api_sync-nginx-setup-ssl
-
-# Deploy SSL certificate
-# Installs SSL certificate with secure permissions
-- name: Copy SSL certificate data
-  copy:
-    content: "{{ nginx_ssl_content }}"
-    dest: "{{ nginx_ssl_filename }}"
-    owner: "root"
-    group: "root"
-    mode: "0600"
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-nginx-setup
-    - corezoid_api_sync-nginx-setup-ssl
-
-# Configure SSL certificate settings
-# Sets up SSL configuration for secure communication
-- name: Create nGinx ssl conf
-  template: src=templates/{{ item }}.j2 dest={{ nginx_ssl_dir }}/{{ item }} owner=root group=root mode=0600
-  with_items:
-    - "cert-corezoid"
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-nginx-setup
-    - corezoid_api_sync-nginx-setup-ssl
-
-# Create SSL certificate symlinks
-# Sets up symbolic links for SSL certificate files
-- name: Create nGinx ssl links
-  file: src={{ nginx_ssl_filename }} dest={{ nginx_ssl_dir }}/{{ item }} state=link
-  with_items:
-    - "corezoid.crt"
-    - "corezoid.key"
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-nginx-setup
-    - corezoid_api_sync-nginx-setup-ssl
-
-# Create main Nginx configuration
-# Sets up the primary Nginx server configuration
-- name: Create nGinx conf
-  template: src=templates/{{ item }}.conf.j2 dest=/etc/{{ item }}/{{ item }}.conf owner=root group=root mode=0600
-  with_items:
-    - nginx
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-nginx-setup
-    - corezoid_api_sync-nginx-mainconfig
-
-# Enable and start Nginx service
-# Ensures Nginx starts on boot and is running
-- name: Enable nGinx to survive reboot
-  service:
-    name: nginx
-    state: started
-    enabled: yes
-  tags:
-    - corezoid_api_sync-all
-    - corezoid_api_sync-nginx-setup
-    - corezoid_api_sync-nginx-system
-
-# Optional Nginx restart task (commented)
-# - name: Restart nGinx
-#   service:
-#     name: nginx
-#     state: restarted
-#   tags:
-#     - corezoid_api_sync-all
-#     - corezoid_api_sync-nginx-setup
-#     - corezoid_api_sync-nginx-restart
+#----------------NGINX-------------------

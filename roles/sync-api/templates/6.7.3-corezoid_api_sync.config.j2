@@ -118,7 +118,7 @@
 
     {lager, [
         %% What handlers to install with what arguments
-        {log_root, "{{ top_dir }}/erlang/{{ item }}/log"},
+        {log_root, "{{ top_dir }}/erlang/{{ service_name }}/log"},
         {handlers, [
             {lager_console_backend, info},
             {lager_file_backend, [{file, "error.log"}, {level, error}, {size, 1500000}, {date, "$D0"}, {count, 0}]},
