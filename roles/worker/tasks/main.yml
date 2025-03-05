@@ -1,12 +1,17 @@
 ---
 # tasks file for worker
 
+# Set service name as a fact for consistent usage
+- name: Set service name variable
+  set_fact:
+    service_name: "worker"
+  tags:
+    - worker-all
+
 # Clean YUM cache to ensure fresh package metadata
 # Removes all cached package data to prevent installation issues
 - name: Yum clean all
   command: yum clean all
-  #  args:
-  #    warn: false
   tags:
     - worker-all
     - worker-install
@@ -15,179 +20,57 @@
 # Installs or updates the worker package from AWS Corezoid repository with specific version
 - name: Install worker app
   yum:
-    name: "{{ item }}-{{ worker.version }}"
+    name: "{{ service_name }}-{{ worker.version }}"
     state: present
     update_cache: yes
     disablerepo: "*"
     enablerepo: "aws-corezoid"
-  with_items:
-    - worker
   tags:
     - worker-all
     - worker-install
 
-# Create log directory for Worker
-# Sets up a directory for application logs with appropriate permissions
-- name: Add log directory
-  file: path={{ top_dir }}/erlang/{{ item }}/log owner={{ app_user }} group={{ app_user }} state=directory
-  with_items:
-    - worker
+# Create all required directories in a single task using a loop
+- name: Create application directories
+  file:
+    path: "{{ item.path }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    state: directory
+    mode: "{{ item.mode }}"
+    recurse: "{{ item.recurse }}"
+  loop:
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}/log", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0755", recurse: no }
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}/internal_db", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0755", recurse: no }
+    - { path: "{{ conf_dir }}", owner: "root", group: "root", mode: "0755", recurse: no }
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0700", recurse: yes }
   tags:
     - worker-all
     - worker-install
-
-# Create internal database directory
-# Establishes a directory for storing internal database files
-- name: Add internal_db directory
-  file: path={{ top_dir }}/erlang/{{ item }}/internal_db owner={{ app_user }} group={{ app_user }} state=directory
-  with_items:
-    - worker
-  tags:
-    - worker-all
-    - worker-install
-
-# Set secure permissions for application directory
-# Ensures all Worker files have proper ownership and restricted access
-- name: Fix permission
-  file: path={{ top_dir }}/erlang/{{ item }} owner={{ app_user }} group={{ app_user }} state=directory mode=0700 recurse=yes
-  with_items:
-    - worker
-  tags:
-    - worker-all
-    - worker-install
-
-# Create configuration directory
-# Sets up a directory for storing application configuration files
-- name: make config folder
-  file: path={{ conf_dir }} owner=root group=root state=directory mode=0755
-  tags:
-    - worker-all
     - worker-config
+
 
 # Generate Worker configuration
 # Creates the main configuration file from template
+#If there is an error, please add it
+# with_items:
+#    - worker
 - name: Create worker.config file
-  template: src=templates/{{ corezoid_release }}-{{ item }}.config.j2 dest={{ worker.config }}
-  with_items:
-    - worker
+  template: src=templates/{{ corezoid_release }}-{{ service_name }}.config.j2 dest={{ worker.config }} owner={{ app_user }} group={{ app_user }} mode=0500
   tags:
     - worker-all
     - worker-config
     - worker-config-file
-
-# Set secure permissions for configuration file
-# Restricts access to the configuration file for security on non-localhost systems
-- name: Fix permission to worker.config file
-  file: state=file path={{ worker.config }} owner={{ app_user }} group={{ app_user }} mode=0500
-  with_items:
-    - worker
-  when: ansible_host != "127.0.0.1"
-  tags:
-    - worker-all
-    - worker-config
-    - worker-config-file
-
-# Configure initial systemd service setup
-# Installs systemd service file and reloads daemon configuration
-- name: Setup app systemd
-  block:
-    - name: Install systemd file
-      template: src=templates/{{ item }}.service.j2 dest=/etc/systemd/system/{{ item }}.service owner=root group=root mode=0644
-      with_items:
-        - worker
-    - name: Reload systemctl
-      shell: systemctl daemon-reload
-  when:
-    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS" or ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
-  tags:
-    - worker-all
-    - worker-app
-    - worker-systemd
-
-# Check existence of systemd service directory
-# Verifies if the systemd service configuration directory exists
-- name: check worker.service.d folder
-  stat:
-    path: "/etc/systemd/system/worker.service.d"
-  register: systemd_folder_check
-  tags:
-    - worker-all
-    - worker-app
-    - worker-systemd
-
-# Create main systemd service configuration
-# Sets up the primary systemd service for Worker management
-- name: Create worker systemd
-  template: src=templates/{{ item }}.service.j2 dest=/etc/systemd/system/{{ item }}.service owner=root group=root mode=0644
-  with_items:
-    - worker
-  tags:
-    - worker-all
-    - worker-initd
-    - worker-initd-systemd
-  when:
-    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9"
-
-# Configure systemd service directory
-# Creates necessary systemd directories and refreshes configuration
-- name: Setup app systemd
-  block:
-    - name: Make folder for static content
-      file:
-        path: "/etc/systemd/system/{{ item }}.service.d"
-        owner: root
-        group: root
-        state: directory
-        mode: 0755
-        recurse: yes
-      with_items:
-        - worker
-    - name: Reload systemctl
-      shell: systemctl daemon-reload
-  when:
-    - systemd_folder_check.stat.isreg is not defined
-    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS" or ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
-  tags:
-    - worker-all
-    - worker-app
-    - worker-systemd
-
-# Configure systemd service limits
-# Sets up resource limits for the service and refreshes systemd
-- name: Setup app systemd
-  block:
-    - name: Install limits file
-      template: src=templates/limits dest=/etc/systemd/system/{{ item }}.service.d/limits.conf owner=root group=root mode=0644
-      with_items:
-        - worker
-    - name: Reload systemctl
-      shell: systemctl daemon-reload
-  when:
-    # - systemd2_folder_check.stat.isreg
-    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS" or ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
-  tags:
-    - worker-all
-    - worker-app
-    - worker-systemd
 
 # Enable and start Worker service
 # Ensures the service starts automatically on boot and is running
 - name: Enable Worker to survive reboot
   service:
-    name: "{{ item }}"
+    name: "{{ service_name }}"
     enabled: yes
     state: started
-    # no_block: yes
-  with_items:
-    - worker
   tags:
     - worker-all
-    - worker-initd
-    - worker-initd-start
+    - worker-start
 
 # Create Monit monitoring configuration
 # Sets up monitoring for the Worker service
@@ -210,16 +93,3 @@
   tags:
     - worker-all
     - worker-monit
-
-# Configure worker ID rotation
-# Sets up automatic rotation of worker ID for security in autoscale environments
-- name: Change worker-id in config
-  cron:
-    special_time: reboot
-    name: "Change worker-id in config"
-    user: "root"
-    job: "rand_id=$(pwgen -n 20 -s 1); sed -i -e \"s/{{ worker_id }}/${rand_id}/g\" {{ worker.config }}"
-  when: autoscale
-  tags:
-    - worker-all
-    - worker-cron

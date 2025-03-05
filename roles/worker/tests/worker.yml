@@ -1,18 +1,4 @@
-package:
-  worker:
-    installed: true
-  openssl:
-    installed: true
-
-service:
-  worker:
-    enabled: true
-    running: true
-
-addr:
-  tcp://127.0.0.1:{{ worker_cluster_port }}:
-    reachable: true
-    timeout: 500
-  tcp://127.0.0.1:{{ worker_interconnect_port }}:
-    reachable: true
-    timeout: 500
+- hosts: localhost
+  remote_user: root
+  roles:
+    - roles/worker
