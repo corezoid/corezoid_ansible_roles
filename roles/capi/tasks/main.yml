@@ -1,14 +1,12 @@
 ---
 #-------------CAPI-------------#
 
-# Display all IPv4 addresses for debugging
-# Shows the current IPv4 addresses configured on the target system
-- name: current ansible_all_ipv4_addresses
-  debug: msg={{ ansible_all_ipv4_addresses }}
+# Set service name as a fact for consistent usage
+- name: Set service name variable
+  set_fact:
+    service_name: "capi"
   tags:
     - capi-all
-    - capi-app
-    - capi-debug
 
 # Clean YUM cache to ensure fresh package metadata
 # Removes all cached package data to prevent installation issues
@@ -23,281 +21,85 @@
 # Installs or updates the CAPI application package with specific version
 - name: Install packages
   yum:
-    name: "{{ item }}"
+    name: "{{ service_name }}-{{ corezoid_release_app_version.capi }}"
     state: present
     update_cache: yes
     disablerepo: "*"
     enablerepo: "aws-corezoid"
-  with_items:
-    - capi-{{ corezoid_release_app_version.capi }}
   tags:
     - capi-all
     - capi-app
     - capi-install
 
-# Create log directory for CAPI application
-# Sets up a secure directory for application logs with restricted permissions
-- name: add log directory
-  file: path={{ top_dir }}/erlang/{{ item }}/log owner={{ app_user }} group={{ app_user }} state=directory mode=0700
-  with_items:
-    - capi
+
+# Create all required directories in a single task using a loop
+- name: Create application directories
+  file:
+    path: "{{ item.path }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    state: directory
+    mode: "{{ item.mode }}"
+    recurse: "{{ item.recurse }}"
+  loop:
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}/log", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0700", recurse: no }
+    - { path: "{{ conf_dir }}", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0500", recurse: no }
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0700", recurse: yes }
   tags:
     - capi-all
-    - capi-app
     - capi-install
-
-# Set secure permissions for CAPI directory
-# Ensures all CAPI application files have proper ownership and restricted access
-- name: Fix permission for capi folder
-  file: path={{ top_dir }}/erlang/{{ item }} owner={{ app_user }} group={{ app_user }} state=directory mode=0700 recurse=yes
-  with_items:
-    - capi
-  tags:
-    - capi-all
-    - capi-app
-    - capi-install
-
-# Check if static avatars directory exists
-# Verifies the presence of the static content directory for avatars
-- name: check static folder
-  stat: path={{ top_dir }}/www/static/avatars
-  register: static_folder_check
-  tags:
-    - capi-all
-    - capi-app
-    - capi-static-env
-
-# Create directory for static avatar content
-# Sets up the directory structure for storing user avatars
-- name: Make folder for static content
-  file: path={{ top_dir }}/www/static/avatars owner={{ app_user }} group={{ app_user }} state=directory mode=0755 recurse=yes
-  when: static_folder_check.stat.isreg is not defined
-  tags:
-    - capi-all
-    - capi-app
-    - capi-static-env
-
-# Verify presence of default avatar
-# Checks if the default avatar image exists in the system
-- name: check default avatar
-  stat: path={{ top_dir }}/www/static/avatars/0.jpg
-  register: def_avatar_check
-  tags:
-    - capi-all
-    - capi-app
-    - capi-static-env
-
-# Install default avatar image
-# Copies the default avatar file to the appropriate location if missing
-- name: add default avatars
-  copy: src=files/default_avatar.jpg dest={{ top_dir }}/www/static/avatars/0.jpg owner={{ app_user }} group={{ app_user }} mode=0644
-  when: def_avatar_check.stat.isreg is not defined
-  tags:
-    - capi-all
-    - capi-app
-    - capi-static-env
-
-# Check market directory existence
-# Verifies if the marketplace directory structure exists
-- name: check market folder
-  stat: path={{ top_dir }}/www/market
-  register: market_folder_check
-  tags:
-    - capi-all
-    - capi-app
-    - capi-market-env
-
-# Create marketplace scheme directory
-# Sets up the directory structure for marketplace scheme storage
-- name: Make folder for market scheme
-  file: path={{ top_dir }}/www/market/scheme owner={{ app_user }} group={{ app_user }} state=directory mode=0755 recurse=yes
-  when: market_folder_check.stat.isreg is not defined
-  tags:
-    - capi-all
-    - capi-app
-    - capi-market-env
-
-# Create configuration directory
-# Establishes a secure directory for storing application configuration
-- name: Make config folder
-  file: path={{ conf_dir }} owner={{ app_user }} group={{ app_user }} state=directory mode=0500
-  tags:
-    - capi-all
-    - capi-app
     - capi-config
+
+- name: Ensure avatar directory exists with default avatar
+  block:
+    - name: Create avatar directory
+      file:
+        path: "{{ top_dir }}/www/static/avatars"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        state: directory
+        mode: "0755"
+        recurse: yes
+
+    - name: Check if default avatar exists
+      stat:
+        path: "{{ top_dir }}/www/static/avatars/0.jpg"
+      register: avatar_check
+
+    - name: Copy default avatar if missing
+      copy:
+        src: "files/default_avatar.jpg"
+        dest: "{{ top_dir }}/www/static/avatars/0.jpg"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0644"
+      when: not avatar_check.stat.exists
+  tags:
+    - capi-all
+    - capi-app
+    - capi-static-env
+
 
 # Generate CAPI configuration file
 # Creates the application configuration file from template
-- name: Create capi config file
-  template: src=templates/{{ corezoid_release }}-{{ item }}.config.j2 dest={{ capi.config }}
-  with_items:
-    - capi
+- name: Create capi.config file
+  template: src=templates/{{ corezoid_release }}-{{ service_name }}.config.j2 dest={{ capi.config }} owner={{ app_user }} group={{ app_user }} mode=0500
   tags:
     - capi-all
-    - capi-app
     - capi-config
     - capi-config-file
-
-# Set secure permissions for configuration
-# Restricts access to the configuration file for security
-- name: Fix permission to capi.config file
-  file: state=file path={{ capi.config }} owner={{ app_user }} group={{ app_user }} mode=0500
-  with_items:
-    - capi
-  when: ansible_host != "127.0.0.1"
-  tags:
-    - capi-all
-    - capi-app
-    - capi-config
-    - capi-config-file
-
-# Backup hosts file
-# Creates a backup copy of the system hosts file
-- name: Make backup /etc/hosts
-  copy:
-    dest: /etc/hosts.bac
-    src: /etc/hosts
-    remote_src: true
-  register: copy_file
-  when:  install_all_in_one == true
-  tags:
-    - capi-all
-    - capi-app
-    - capi-config
-    - capi-hosts-file
-
-- debug: var=copy_file.backup_file
-
-# Create symbolic link for configuration
-# Sets up symlink for superadmin configuration access
-- name: Generate /etc/hosts for local conn
-  file:
-    src: "/ebsmnt/www/conf-agent-client"
-    dest: "/ebsmnt/www/conf-agent-client/superadmin"
-    state: link
-  when:  install_all_in_one == true
-  tags:
-    - front-capi-all
-    - front-capi-nginx-setup
-    - front-capi-nginx-configs
-    - front-capi-nginx-symlink
-
-# Configure systemd service
-# Sets up and enables the systemd service for CAPI
-- name: Setup app systemd
-  block:
-    - name: Install systemd file
-      template: src=templates/{{ item }}.service.j2 dest=/etc/systemd/system/{{ item }}.service owner=root group=root mode=0644
-      with_items:
-        - capi
-    - name: Reload systemctl
-      shell: systemctl daemon-reload
-  when:
-    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS" or ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
-  tags:
-    - capi-all
-    - capi-app
-    - capi-systemd
-
-# Verify systemd service directory
-# Checks if the systemd service configuration directory exists
-- name: check capi.service.d folder
-  stat:
-    path: "/etc/systemd/system/capi.service.d"
-  register: systemd_folder_check
-  tags:
-    - capi-all
-    - capi-app
-    - capi-systemd
-
-# Create systemd service directory
-# Sets up necessary directories for systemd service configuration
-- name: Setup app systemd
-  block:
-    - name: Make folder for static content
-      file:
-        path: "/etc/systemd/system/{{ item }}.service.d"
-        owner: root
-        group: root
-        state: directory
-        mode: 0755
-        recurse: yes
-      with_items:
-        - capi
-    - name: Reload systemctl
-      shell: systemctl daemon-reload
-  when:
-    - systemd_folder_check.stat.isreg is not defined
-    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS" or ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
-  tags:
-    - capi-all
-    - capi-app
-    - capi-systemd
-
-# Configure systemd service limits
-# Sets up resource limits and reloads systemd configuration
-- name: Setup app systemd
-  block:
-    - name: Install limits file
-      template: src=templates/limits dest=/etc/systemd/system/{{ item }}.service.d/limits.conf owner=root group=root mode=0644
-      with_items:
-        - capi
-    - name: Reload systemctl
-      shell: systemctl daemon-reload
-  when:
-    # - systemd2_folder_check.stat.isreg
-    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS" or ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
-  tags:
-    - capi-all
-    - capi-app
-    - capi-systemd
 
 # Enable CAPI service
 # Ensures CAPI service starts on boot and is running
 - name: Enable capi to survive reboot
   service:
-    name: "{{ item }}"
+    name: "{{ service_name }}"
     enabled: yes
     state: started
-  with_items:
-    - capi
   tags:
     - capi-all
     - capi-app
-    - capi-initd
-    - capi-initd-start
-
-# Configure Elasticsearch replicas (disabled)
-# Sets the number of replicas for Elasticsearch indices
-# - name: Set number of replicas
-#   uri:
-#     url: "http://{{ capi_es_host }}:9200/*/_settings?pretty"
-#     method: PUT
-#     body: "{ \"template\": \"*\", \"settings\": { \"number_of_replicas\": 0  }}"
-#     body_format: json
-#     headers:
-#       Content-Type: "application/json"
-#   tags:
-#     - capi-all
-#     - capi-app
-#     - capi-elasticsearch
-
-# Configure CAPI ID rotation
-# Sets up automatic rotation of CAPI ID for security
-- name: Change capi-id in config
-  cron:
-    special_time: reboot
-    name: "Change capi-id in config"
-    user: "root"
-    job: "rand_id=$(pwgen -n 20 -s 1); sed -i -e \"s/{{ capi_id }}/${rand_id}/g\" {{ capi.config }}"
-  when: autoscale
-  tags:
-    - capi-all
-    - capi-app
-    - capi-cron
+    - capi-start
 
 # Create Monit monitoring configuration
 # Sets up monitoring for the CAPI service
