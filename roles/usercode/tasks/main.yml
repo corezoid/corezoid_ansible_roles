@@ -1,81 +1,56 @@
 ---
 # tasks file for usercode
--
-  # Clean YUM cache to ensure fresh package metadata
+# Set service name as a fact for consistent usage
+- name: Set service name variable
+  set_fact:
+    service_name: "usercode"
+  tags:
+    - usercode-all
+
+# Clean YUM cache to ensure fresh package metadata
 # Removes all cached package data to prevent installation issues
 - name: Yum clean all
   command: yum clean all
-  #  args:
-  #    warn: false
   tags:
     - usercode-all
     - usercode-install
-
-# Legacy GCC configuration (commented)
-#=============================================
-#- name: Add gcc.repo
-#  template:
-#    src: gcc.repo
-#    dest: /etc/yum.repos.d/gcc.repo
-
-#- name: Install gcc packages
-#  yum:
-#    name: "{{ item }}"
-#    state: present
-#    update_cache: yes
-#    disablerepo: "*"
-#    enablerepo: "gcc"
-#    disable_gpg_check: yes
-#  with_items:
-#    - "gcc-libs-0.0.3"
-#  tags:
-#    - usercode-all
-#    - usercode-install
-#=============================================
 
 # Install Usercode package
 # Installs or updates the usercode package from AWS Corezoid repository
 - name: Install packages
   yum:
-    name: "{{ item }}"
+    name: "{{ service_name }}-{{ usercode.version }}"
     state: present
     update_cache: yes
     disablerepo: "*"
     enablerepo: "aws-corezoid"
     disable_gpg_check: yes
-  with_items:
-    - "usercode-{{ usercode.version }}"
-  #    - "gcc-libs-0.0.3"
   tags:
     - usercode-all
     - usercode-install
 
-# Create configuration directory
-# Sets up a directory for storing application configuration files
-- name: Make config folder
-  file: path={{ conf_dir }} owner=root group=root state=directory mode=0755
+# Create all required directories in a single task using a loop
+- name: Create application directories
+  file:
+    path: "{{ item.path }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    state: directory
+    mode: "{{ item.mode }}"
+    recurse: "{{ item.recurse | default(false) }}"
+  loop:
+    - { path: "{{ conf_dir }}", owner: "root", group: "root", mode: "0755" }
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}/log", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0755" }
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0700", recurse: yes }
   tags:
     - usercode-all
     - usercode-config
+    - usercode-install
 
 # Generate Usercode configuration
 # Creates the main configuration file from template
 - name: Create app configs
-  template:
-    src: "templates/{{ corezoid_release }}-usercode.config.j2"
-    dest: "{{ usercode.config }}"
-  tags:
-    - usercode-all
-    - usercode-config
-    - usercode-config-file
-
-# Set secure permissions for configuration file
-# Restricts access to the configuration file for security on non-localhost systems
-- name: Fix permission to usercode.config file
-  file: state=file path={{ usercode.config }} owner={{ app_user }} group={{ app_user }} mode=0500
-  with_items:
-    - usercode
-  when: ansible_host != "127.0.0.1"
+  template: src=templates/{{ corezoid_release }}-{{ service_name }}.config.j2 dest={{ usercode.config }} owner={{ app_user }} group={{ app_user }} mode=0500
   tags:
     - usercode-all
     - usercode-config
@@ -121,117 +96,16 @@
     - usercode-install
     - usercode-add-libs
 
-# Create log directory for Usercode
-# Sets up a directory for application logs with appropriate permissions
-- name: Add log directory
-  file: path={{ top_dir }}/erlang/{{ item }} owner={{ app_user }} group={{ app_user }} state=directory
-  with_items:
-    - "usercode/log"
-  tags:
-    - usercode-all
-    - usercode-install
-
-# Set secure permissions for application directory
-# Ensures all Usercode files have proper ownership and restricted access
-- name: Fix permission
-  file: path={{ top_dir }}/erlang/{{ item }} owner={{ app_user }} group={{ app_user }} state=directory mode=0700 recurse=yes
-  with_items:
-    - usercode
-  tags:
-    - usercode-all
-    - usercode-install
-    - usercode-install-permission
-
-# Configure systemd service
-# Sets up systemd service configuration for automatic process management
-- name: Setup app systemd
-  template: src=templates/{{ item }}.service.j2 dest=/etc/systemd/system/{{ item }}.service owner=root group=root mode=0644
-  with_items:
-    - usercode
-  tags:
-    - usercode-all
-    - usercode-initd
-    - usercode-systemd
-
-# Check existence of systemd service directory
-# Verifies if the systemd service configuration directory exists
-- name: check usercode.service.d folder
-  stat:
-    path: "/etc/systemd/system/usercode.service.d"
-  register: systemd_folder_check
-  tags:
-    - usercode-all
-    - usercode-app
-    - usercode-systemd
-
-# Configure systemd service directory and reload daemon
-# Creates necessary systemd directories and refreshes systemd configuration
-- name: Setup app systemd
-  block:
-    - name: Make folder for static content
-      file:
-        path: "/etc/systemd/system/{{ item }}.service.d"
-        owner: root
-        group: root
-        state: directory
-        mode: 0755
-        recurse: yes
-      with_items:
-        - usercode
-    - name: Reload systemctl
-      shell: systemctl daemon-reload
-  when:
-    - systemd_folder_check.stat.isreg is not defined
-    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS" or ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
-  tags:
-    - usercode-all
-    - usercode-app
-    - usercode-systemd
-
-# Verify systemd service directory status
-# Double-checks the systemd service directory configuration
-- name: check usercode.service.d folder
-  stat:
-    path: "/etc/systemd/system/usercode.service.d"
-  register: systemd2_folder_check
-  tags:
-    - usercode-all
-    - usercode-app
-    - usercode-systemd
-
-# Install systemd service limits and reload configuration
-# Sets up resource limits for the service and refreshes systemd
-- name: Setup app systemd
-  block:
-    - name: Install limits file
-      template: src=templates/limits dest=/etc/systemd/system/{{ item }}.service.d/limits.conf owner=root group=root mode=0644
-      with_items:
-        - usercode
-    - name: Reload systemctl
-      shell: systemctl daemon-reload
-  when:
-    # - systemd2_folder_check.stat.isreg
-    - ansible_os_family == "RedHat" or ansible_os_family == "CentOS" or ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "2" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
-  tags:
-    - usercode-all
-    - usercode-app
-    - usercode-systemd
-
 # Enable and start Usercode service
 # Ensures the service starts automatically on boot and is running
 - name: Enable services to survive reboot
   service:
-    name: "{{ item }}"
+    name: "{{ service_name }}"
     enabled: yes
     state: started
-  with_items:
-    - usercode
   tags:
     - usercode-all
-    - usercode-initd
-    - usercode-initd-start
+    - usercode-start
 
 # Create Monit monitoring configuration
 # Sets up monitoring for the Usercode service
@@ -254,16 +128,3 @@
   tags:
     - usercode-all
     - usercode-monit
-
-# Configure CCE ID rotation
-# Sets up automatic rotation of CCE ID for security in autoscale environments
-- name: Change usercode-id in config
-  cron:
-    special_time: reboot
-    name: "Change cce-id in config"
-    user: "root"
-    job: "rand_id=$(pwgen -n 20 -s 1); sed -i -e \"s/{{ cce_id }}/${rand_id}/g\" {{ usercode.config }}"
-  when: autoscale
-  tags:
-    - usercode-all
-    - usercode-cron
