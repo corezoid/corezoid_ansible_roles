@@ -1,24 +1,4 @@
-#package:
-#  capi:
-#    installed: true
-#    versions:
-#      - {{ corezoid_release_app_version.capi }}
-#  corezoid-web-admin:
-#    installed: true
-#    versions:
-#      - {{ corezoid_release_app_version.corezoid_web_admin }}
-#
-#service:
-#  capi:
-#    enabled: true
-#    running: true
-#
-#addr:
-#  tcp://127.0.0.1:{{ capi_port }}:
-#    reachable: true
-#    timeout: 500
-port:
-  tcp:22:
-    listening: true
-    ip:
-      - 0.0.0.0
+- hosts: localhost
+  remote_user: root
+  roles:
+    - roles/front_capi
