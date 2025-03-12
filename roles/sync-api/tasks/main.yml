@@ -7,6 +7,7 @@
     service_name: "corezoid_api_sync"
   tags:
     - corezoid_api_sync-all
+    - corezoid_api_sync-app
 
 # Clean YUM cache to ensure fresh package metadata
 # Removes all cached package data to prevent installation issues
