@@ -6,7 +6,7 @@
   set_fact:
     service_name: "capi"
   tags:
-    - capi-all
+    - always
 
 # Clean YUM cache to ensure fresh package metadata
 # Removes all cached package data to prevent installation issues
@@ -52,6 +52,11 @@
 
 - name: Ensure avatar directory exists with default avatar
   block:
+    - name: Check if avatar directory exists
+      stat:
+        path: "{{ top_dir }}/www/static/avatars"
+      register: avatar_dir_status
+
     - name: Create avatar directory
       file:
         path: "{{ top_dir }}/www/static/avatars"
@@ -60,6 +65,7 @@
         state: directory
         mode: "0755"
         recurse: yes
+      when: not avatar_dir_status.stat.exists
 
     - name: Check if default avatar exists
       stat:

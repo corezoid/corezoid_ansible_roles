@@ -6,7 +6,7 @@
     service_name: "http-worker"
     service_config_name: "http_worker"
   tags:
-    - http-worker-all
+    - always
 
 # Clean YUM cache to ensure fresh package metadata
 # Removes all cached package data to prevent installation issues

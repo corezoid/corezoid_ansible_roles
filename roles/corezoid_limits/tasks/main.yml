@@ -3,8 +3,7 @@
   set_fact:
     service_name: "corezoid_limits"
   tags:
-    - corezoid_limits-all
-    - corezoid_limits-app
+    - always
 
 # Clean YUM cache to ensure fresh package metadata
 # Removes all cached package data to prevent installation issues and ensure clean state

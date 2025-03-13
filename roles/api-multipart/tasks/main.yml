@@ -5,7 +5,7 @@
     service_name: "conveyor_api_multipart"
     systemd_service_dir: "/etc/systemd/system/conveyor_api_multipart.service.d"
   tags:
-    - api-multipart-all
+    - always
 
 # This task removes all cached package data to prevent installation issues
 - name: Yum clean all
