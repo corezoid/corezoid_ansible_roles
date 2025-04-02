@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Payment plan initialization for conveyor database
 - Documentation and usage examples
 
+## [1.1.0] - 2025-04-02
+### Added
+- New dedicated database corezoid_counters with specialized tables structure
+
 ### Notes
 - Requires Ansible >2.17.0 
 - Requires root privileges on target servers

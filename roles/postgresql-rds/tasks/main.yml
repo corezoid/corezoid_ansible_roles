@@ -130,6 +130,7 @@
     - limits
     - git_call
     - accounts
+    - corezoid_counters
   tags:
     - rds-all
     - rds-create-main-dbs
@@ -175,6 +176,7 @@
     - conveyor_statistics
     - settings
     - limits
+    - corezoid_counters
   loop_control:
     loop_var: outer_item
   async: 60

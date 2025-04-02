@@ -152,6 +152,7 @@
     - settings
     - accounts
     - limits
+    - corezoid_counters
   tags:
     - pgsql-all
     - pgsql-create-main-dbs
@@ -191,6 +192,7 @@
     - git_call
     - settings
     - limits
+    - corezoid_counters
   loop_control:
     loop_var: outer_item
   async: 60

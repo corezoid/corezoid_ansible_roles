@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - PgBouncer installation and configuration for connection pooling
     - Automated maintenance scripts and cron jobs
 
+## [1.1.0] - 2025-04-02
+### Added
+- New dedicated database corezoid_counters with specialized tables structure
+
 ### Optimized
 - Consolidated duplicate tasks for improved performance
 - Structured tasks into logical groups for better management
