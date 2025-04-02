@@ -83,6 +83,11 @@ capi_sender_env: "md"
 sender_ui: false
 
 capi_elasticsearch: true
+capi_copilot_sdk_enable: false
+capi_copilot_sdk:
+  api_key: ""
+  path_completion: ""
+  path_explanation: ""
 
 capi_oauth_pb: "false"
 capi_auth_ldap: "false"

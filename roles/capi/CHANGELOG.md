@@ -24,6 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use of service_name variable to improve flexibility and maintainability
 - Full compatibility with Corezoid infrastructure
 
+## [1.1.0] - 2025-04-02
+
+### Added
+- added block corezoid_counters_internal for capi.config
+- added block copilot_sdk for capi.config
+
+### Changes
+- box.yml add copilot_sdk block for README
+
 ### Supported Platforms
 - RHEL/CentOS 7, 8, 9
 - Amazon Linux 2
