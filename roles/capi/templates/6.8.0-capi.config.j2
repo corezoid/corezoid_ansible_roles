@@ -118,9 +118,8 @@
     {corezoid_counters_internal, [
       {node_counters, [
             {driver, redis}, %% postgres | redis
-            {driver_redis, [
-            {% for item in redis_counters %}
-              [
+            {driver_redis, [[
+{% for item in redis_counters %}
               {host, "{{ item.host }}"},
               {port, {{ item.port }}},
               {database,{{ item.db }}},
@@ -128,13 +127,13 @@
               {start_size, 1},
               {min_size, 1},
               {max_size, 50}
-              ]]},
-            {% endfor %}
+            ]]},
+{% endfor %}
             {driver_postgres, [
               {host, "{{ db_main.host }}"},
               {user, "{{ db_main.user }}"},
               {dbname, "corezoid_counters"},
-              {password, "{{ db_main.pass }}"}
+              {password, "{{ db_main.pass }}"},
               {start_size, 5},
               {min_size, 5},
               {max_size, 5}
@@ -142,23 +141,22 @@
           ]},
           {api_sum_logic, [
             {driver, redis}, %% postgres | redis
-            {driver_redis, [
-            {% for item in redis_api_sum %}
-              [
+            {driver_redis, [[
+{% for item in redis_api_sum %}
               {host, "{{ item.host }}"},
               {port, {{ item.port }}},
               {database,{{ item.db }}},
-               {password,"{{ item.password }}"},,
+              {password,"{{ item.password }}"},
               {start_size, 10},
               {min_size, 10},
               {max_size, 100}
             ]]},
-            {% endfor %}
+{% endfor %}
             {driver_postgres, [
               {host, "{{ db_main.host }}"},
               {user, "{{ db_main.user }}"},
               {dbname, "corezoid_counters"},
-              {password, "{{ db_main.pass }}"}
+              {password, "{{ db_main.pass }}"},
               {start_size, 5},
               {min_size, 5},
               {max_size, 5}
