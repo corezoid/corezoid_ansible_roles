@@ -1,0 +1,403 @@
+%% -*- mode: erlang;  -*-
+%server name
+[
+
+  %% pool_size to resolve ip through dns services.
+  {kernel, [
+    {gethost_poolsize, 10},
+    {inet_cache_refresh, 60000}, % default 1h
+    {inet_lookup, [file, dns]},  % default native
+    {inet_cache_size, 100}       % default 100
+  ]},
+
+  %% Plugin for upload messagess
+  { corezoid_logs_sender, [
+    { handlers, [
+{% if rmq_logs %}
+      {info_msg, [ %% sending logs info_msg
+        {host, '{{ rmq_logs_host }}'},
+        {port, {{ rmq_logs_port }}},
+        {exchange, <<"{{ rmq_logs_exchange }}">>},
+        {queue, <<"{{ rmq_logs_queues_name }}{% raw %}{{=i}}{% endraw %}">>},
+        {username, <<"{{ rmq_logs_username }}">>},
+        {password, <<"{{ rmq_logs_password }}">>},
+        {vhost, <<"{{ rmq_logs_vhost }}">>},
+        {queues_count, {{rmq_logs_queues_count}}},
+        {thread_count, {{rmq_logs_thread_count}}}
+      ]}
+{% endif %}
+    ]}
+  ]},
+
+{% if licence_db_enabled == "true" %}
+  {corezoid_license_client, [
+     {driver, "db"},
+       {pgsql, [
+       {host, "{{ db_main.host }}"},
+       {user, "{{ db_main.user }}"},
+       {dbname, "settings"},
+       {password, "{{ db_main.pass }}"}
+       ]}
+  ]},
+{% else %}
+  {corezoid_license_client, [
+    {driver, "fs"},
+      {path_to_license, "{{ top_dir }}/certs/{{ license_file_name }}"}
+  ]},
+{% endif %}
+
+  {is_ready, [
+         {port, 8381},
+         {enabled, true}
+     ]},
+
+  {gen_rpc, [
+    {tcp_server_port, false}
+  ]},
+
+    {mw_metrics, [
+      {is_enabled, {{ prometheus_metrics | default("false") }} },
+      {subsystems, [erlprometheus]}
+    ]},
+
+    {erlprometheus, [
+      {host, {0,0,0,0}},
+      {port, 9100}
+    ]},
+
+  %% global_stats
+  {corezoid_global_stats, [
+    {disabled, true},
+    {host, "gs.corezoid.com"},
+    {port, 443},
+    {send_stat_interval, 60} %% in seconds
+  ]},
+
+  {dns_cache, [
+    {servers, [
+{% for item in rmq_core %}
+      [
+        {name, {{ item.dns_cache_name }}},
+        {dns, "{{ item.host }}"},
+        {ttl, {{ dns_cache_ttl | default(60) }}}
+      ],
+{% endfor %}
+      [
+        {name, {{ rmq_http[0].dns_cache_name }}},
+        {dns, "{{ rmq_http[0].host }}"},
+        {ttl, {{ dns_cache_ttl | default(60) }}}
+      ]
+    ]}
+  ]},
+
+    {ermql, [
+
+        {publish_request, [
+            {servers, [
+                [
+                    %%{dns_name, {{ rmq_http[0].dns_cache_name }}},
+                    {host, "{{ rmq_http[0].host }}"},
+                    {port, {{ rmq_http[0].port }}},
+                    {username, <<"{{ rmq_http[0].user }}">>},
+                    {password, <<"{{ rmq_http[0].pass }}">>},
+                    {vhost, <<"{{ rmq_vhost }}">>}
+                ]
+            ]},
+            {queues_count, 1},
+            {min_size, 1},
+            {max_size, 1},
+            {start_size, 1}
+        ]},
+
+        {consumer_response, [
+            {servers, [
+                [
+                    %%{dns_name, {{ rmq_http[0].dns_cache_name }}},
+                    {host, "{{ rmq_http[0].host }}"},
+                    {port, {{ rmq_http[0].port }}},
+                    {username, <<"{{ rmq_http[0].user }}">>},
+                    {password, <<"{{ rmq_http[0].pass }}">>},
+                    {vhost, <<"{{ rmq_vhost }}">>}
+                ]
+            ]},
+            {connections_per_queue, 1},
+            {channels_per_connection, 1},
+            {messages_prefetch_size_per_channel, 50}
+        ]}
+    ]},
+
+
+  %% for clustering components
+  {corezoid_cluster, [
+    {backend, redis}, %% maybe if future list will increase
+    {redis, [
+      {host, "{{ redis_cache[0].host }}"},
+      {port, {{ redis_cache[0].port }}},
+      {database, 10},
+      {password, "{{ redis_cache_password | default("") }}"}
+    ]}
+  ]},
+
+  {corezoid_queues_gc, [
+    {disabled, true},
+    {host, "{{ rmq_http[0].host }}"},
+    {port, 15672},
+    {vhost, "{{ rmq_http[0].vhost }}"},
+    {login, "conveyor_gc"},
+    {password, "{{ rmq_http[0].pass }}"},
+    {gc_queues_regexp, ["settings", "conf_agent_client_queue_http_worker", "ermql_license_distributor_request_http_worker",
+                       "mw_component_version_client_queue_http_worker"]}
+  ]},
+{% if enigma_is_enabled == "true" %}
+  {enigma, [
+    {is_enabled, {{ enigma_is_enabled }}},
+    {private_key_id, "{{ enigma_private_key_id }}"},
+    {key_manager_host, "{{ enigma_key_manager_host }}"},
+
+    {client_cert, "{{ enigma_client_cert }}"},
+    {client_key, "{{ enigma_client_key }}"},
+    {ca_cert, "{{ enigma_ca_cert }}"},
+
+    {rotors_pool, [
+      {min_size, 5},
+      {max_size, 5},
+      {start_size, 5}
+    ]}
+  ]},
+{% else %}
+    {enigma, [
+        {is_enabled, {{ enigma_is_enabled }}}
+    ]},
+{% endif %}
+
+  {http_worker, [
+    %server name
+    {worker_id, <<"http-worker-{{ http_worker_id | default(ansible_default_ipv4.address) }}">>},
+    {prometheus_metrics, {{ prometheus_metrics | default("false") }} },
+
+{% if http_worker_proxy_host is defined and http_worker_proxy_port is defined %}
+    {proxy, [
+      {host, "{{ http_worker_proxy_host }}"},
+      {port, {{ http_worker_proxy_port }}},
+      {excluded_hosts, [
+{% for item in http_worker_proxy_excluded_hosts %}
+        "{{ item.host }}"{% if http_worker_proxy_excluded_hosts.index(item) == http_worker_proxy_excluded_hosts|length - 1 %}{% else %},
+{% endif %}
+{% endfor %}
+      ]}
+    ]},
+{% endif %}
+{% if http_worker_max_keep_alive_connections_len is defined %}
+    {max_keep_alive_connections_len, {{ http_worker_max_keep_alive_connections_len }}}, %% use for poolling keep-alive connections. If zerro it'll open new connection each query
+{% endif %}
+{% if http_worker_max_client_response_wait_time is defined %}
+    %% If you need to wait answer more than 60 sec you can change this
+    %% But I don't recommend to do it, because tcp connection can be interrupted
+    %% and client don't receive answer through tcp connect
+    %% If your application don't send answer in 60 sec you should try callback logic in process
+    {max_client_response_wait_time, {{ http_worker_max_client_response_wait_time }}}, %% in seconds
+{% endif %}
+    {max_http_resp_size, {{ http_worker_max_http_resp_size | default(524288) }}},
+
+    %% count of shards
+    { shards_count, {{ shards_count }} },
+
+    %% PgSQL settings
+    { pgsql,
+      [
+        { host, "{{ db_main.host }}" },
+        { hosts, [
+{% for item in db_shards %}
+{% if db_shards.index(item) == db_shards|length - 1 %}
+          { {{ item.shards }}, "{{ item.host }}" }
+{% else %}
+          { {{ item.shards }}, "{{ item.host }}" },
+{% endif %}
+{% endfor %}
+        ]},
+        { user, "{{ db_main.user }}" },
+        { dbname, "conveyor" },
+        { password, "{{ db_main.pass }}" },
+        { start_size, 2 },
+        { min_size, {{ http_worker_pgsql_min_size | default(2) }} },
+        { max_size, 100 }
+      ]
+    },
+
+    %% for highloads clients
+    {pgsql2, []},
+
+    %% memory redis for cache task list
+    {redis, [
+{% for item in redis_cache %}
+      [
+        {host, "{{ item.host }}"},
+        {port, {{ item.port }}},
+        {database,{{ item.db }}},
+        {password,"{{ item.password }}"},
+        {start_size, 50},
+        {min_size, 50},
+        {max_size, 200}
+{% if redis_cache.index(item) == redis_cache|length - 1 %}
+      ]
+{% else %}
+      ],
+{% endif %}
+{% endfor %}
+    ]},
+
+    % http answer
+    {publish_http_request, [
+      {servers, [
+        { {{ shards }}, [[
+          %{dns_name, {{ rmq_http[0].dns_cache_name }}}
+          {host, '{{ rmq_http[0].host }}'}
+        ]]}
+      ]},
+      {port, {{ rmq_port }}},
+      {username, <<"{{ rmq_user }}">>},
+      {password, <<"{{ rmq_user_pass }}">>},
+      {vhost, <<"{{ rmq_vhost }}">>},
+      {min_size, {{ http_publish_http_request_min_size | default(20) }}},
+      {max_size, {{ http_publish_http_request_max_size | default(20) }}},
+      {start_size, {{ http_publish_http_request_start_size | default(20) }}}
+    ]},
+
+    %% http consumer
+    {http_consumer, [
+      {servers, [
+        [
+          %%{dns_name, {{ rmq_http[0].dns_cache_name }}},
+          {host, '{{ rmq_http[0].host }}'},
+          {port, {{ rmq_port }}},
+          {username, <<"{{ rmq_user }}">>},
+          {password, <<"{{ rmq_user_pass }}">>},
+          {vhost, <<"{{ rmq_vhost }}">>}
+        ]
+      ]},
+      {queues_count, {{ pub_http_queues_count | default(1) }}},
+      {connections_per_queue, {{ http_http_consumer_connections_per_queue | default(8) }}},
+      {channels_per_connection, {{ http_http_consumer_channels_per_connection | default(4) }}},
+      {messages_prefetch_size_per_channel, {{ http_http_consumer_messages_prefetch_size_per_channel | default(50) }}}
+    ]},
+
+    %% settings producer
+    {publish_settings, [
+      {servers, [
+        [
+          %%{dns_name, {{ rmq_http[0].dns_cache_name }}},
+          {host, '{{ rmq_http[0].host }}'},
+          {port, {{ rmq_port }}},
+          {username, <<"{{ rmq_user }}">>},
+          {password, <<"{{ rmq_user_pass }}">>},
+          {vhost, <<"{{ rmq_vhost }}">>}
+        ]
+      ]},
+      {min_size, {{ http_publish_publish_settings_min_size | default(1) }}},
+      {max_size, {{ http_publish_publish_settings_max_size | default(1) }}},
+      {start_size, {{ http_publish_publish_settings_start_size | default(1) }}}
+    ]},
+
+    %% консьюмер настроек
+    {consumer_settings, [
+      {servers, [
+        [
+          %%{dns_name, {{ rmq_http[0].dns_cache_name }}},
+          {host, '{{ rmq_http[0].host }}'},
+          {port, {{ rmq_port }}},
+          {username, <<"{{ rmq_user }}">>},
+          {password, <<"{{ rmq_user_pass }}">>},
+          {vhost, <<"{{ rmq_vhost }}">>}
+        ]
+      ]},
+      {connections_per_queue, 1},
+      {channels_per_connection, 1},
+      {messages_prefetch_size_per_channel, 50}
+    ]},
+
+    {logs, [
+      {info, [
+        {status, on},      % off by default
+        {headers, off},    % on by default (For disable Request and Response headers in logs)
+        {body, off}        % on by default (For disable Request and Response body in logs)
+      ]},
+      {error, [
+        {headers, off},
+        {status, on},
+        {body, off}
+      ]}
+    ]},
+
+    {statistics, [
+      {max_elements_in_log, 20},
+      {time_to_print_log, 5}
+    ]}
+
+  ]},
+
+  {lager, [
+    %% What handlers to install with what arguments (wrapped by middleman)
+
+    {log_root, "{{ top_dir }}/erlang/{{ service_name }}/log"},
+    {handlers, [
+        {lager_console_backend, [{level, info}]},
+        {lager_file_backend, [{file, "error.log"}, {level, error}, {size, 734003200}, {date, "$D0"}, {count, 5}]},
+        {lager_file_backend, [{file, "console.log"}, {level, info}, {size, 734003200}, {date, "$D0"}, {count, 5}]}
+    ]},
+    %% What colors to use with what log levels
+    {colored, true},
+    {colors, [
+        {debug,     "\e[0;38m" },
+        {info,      "\e[1;37m" },
+        {notice,    "\e[1;36m" },
+        {warning,   "\e[1;33m" },
+        {error,     "\e[1;31m" },
+        {critical,  "\e[1;35m" },
+        {alert,     "\e[1;44m" },
+        {emergency, "\e[1;41m" }
+    ]},
+    %% Whether to write a crash log, and where. Undefined means no crash logger.
+    {crash_log, "crash.log"},
+    %% Maximum size in bytes of events in the crash log - defaults to 65536
+    {crash_log_msg_size, 65536},
+    %% Maximum size of the crash log in bytes, before its rotated, set
+    %% to 0 to disable rotation - default is 0
+    {crash_log_size, 10485760},
+    %% What time to rotate the crash log - default is no time
+    %% rotation. See the README for a description of this format.
+    {crash_log_date, "$D0"},
+    %% Number of rotated crash logs to keep, 0 means keep only the
+    %% current one - default is 0
+    {crash_log_count, 5},
+    %% Whether to redirect error_logger messages into lager - defaults to true
+    {error_logger_redirect, true},
+    %% How many messages per second to allow from error_logger before we start dropping them
+    {error_logger_hwm, 50},
+    %% How big the gen_event mailbox can get before it is switched into sync mode
+    {async_threshold, 20},
+    %% Switch back to async mode, when gen_event mailbox size decrease from `async_threshold'
+    %% to async_threshold - async_threshold_window
+    {async_threshold_window, 5}
+]},
+
+
+{% if hc_server_disabled == "false" %}
+  %% Client for server healthcheck
+  {hcheck_sender, [
+    {host, <<"{{ hc_server_host }}">>}, %% host of the remote healthcheck server
+    {port, {{ hc_server_port }}}, %% port of the remote healthcheck server
+    {node_name, <<"capi-{{ capi_id | default(ansible_default_ipv4.address) }}">> }, %% different for each node
+    {node_type, <<"capi">> }, %% capi | worker | multipart | http_worker | usercode | deepmemo ...
+    {disabled, {{ hc_server_disabled }}}, %% true by default
+    {send_interval_sec, {{ hc_server_send_interval_sec | default(30) }}}, %% by default 10 sec
+    {send_system_counters, true} %% memory processes etc, false by default
+  ]},
+{% else %}
+  {hcheck_sender, [
+    {disabled, {{ hc_server_disabled }}} %% true by default
+  ]},
+{% endif %}
+
+  {sasl, [{sasl_error_logger, false}]}
+
+].
