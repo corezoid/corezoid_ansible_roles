@@ -50,27 +50,6 @@
     - capi-install
     - capi-config
 
-# Check market directory existence
-# Verifies if the marketplace directory structure exists
-- name: check market folder
-  stat: path={{ top_dir }}/www/market
-  register: market_folder_check
-  tags:
-    - capi-all
-    - capi-app
-    - capi-market-env
-
-# Create marketplace scheme directory
-# Sets up the directory structure for marketplace scheme storage
-- name: Make folder for market scheme
-  file: path={{ top_dir }}/www/market/scheme owner={{ app_user }} group={{ app_user }} state=directory mode=0755 recurse=yes
-  when: market_folder_check.stat.isreg is not defined
-  tags:
-    - capi-all
-    - capi-app
-    - capi-market-env
-
-
 - name: Ensure avatar directory exists with default avatar
   block:
     - name: Check if avatar directory exists
