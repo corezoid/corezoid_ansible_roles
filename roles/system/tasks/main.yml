@@ -154,9 +154,19 @@
     - system-all
     - system-delete-trash-dir
 
-- name: install base Packages
-  yum:
-    name:
+- name: install oracle-epel-release-el9
+  shell: dnf install -y oracle-epel-release-el9
+  when:
+    - ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "9"
+
+- name: Install base packages one by one
+  ansible.builtin.yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+    # lock_timeout: 360
+  loop:
     - "bind-utils"
     - "mc"
     - "atop"
@@ -179,11 +189,9 @@
     - "jq"
     - "bash-completion"
     - "cronie"
-
-    # lock_timeout: 360
-    state: present
-    update_cache: yes
-  ignore_errors: yes
+    - "sysstat"
+  register: package_result
+  failed_when: false
   tags:
     - system-all
     - system-rpm
