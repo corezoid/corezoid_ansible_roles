@@ -561,6 +561,7 @@
           %%{market, <<"...">>}, %% market (market api call)
           {ws, <<"{{ capi_endpoint }}">>},  %% websocket
           {auth, <<"{{ capi_endpoint }}">> },
+          {openapi, <<"openapi.corezoid.com">>},
 {% if capi_auth_single_account is defined and capi_auth_single_account == "true" %}
 {% if single_account_location is defined %}
           {base_path, "/account"},
@@ -582,7 +583,8 @@
             {introduction, <<"/introduction">>},
             {bot_platform, <<"/bot-platform-20">>},
             {task_export, <<"/tasks-export">>},
-            {mask_values, <<"/task-parameters#masking-values">>}
+            {mask_values, <<"/task-parameters#masking-values">>},
+            {openapi_auth, <<"/#section/Authentication">>}
           ]},
           {compare, <<"/api/2/compare">>},
           {merge, <<"/api/2/merge">>},
