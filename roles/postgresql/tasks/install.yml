@@ -175,18 +175,18 @@
     - postgresql-initdb
 
 # Initialize PostgreSQL database on non-Amazon distributions
-- name: Init DB
-  become: true
-  become_user: postgres
-  when:
-    - not pgdata_dir_version.stat.exists
-    - ansible_distribution != "Amazon"
-  shell: /usr/pgsql-{{ db_version }}/bin/initdb -D {{ db_dir }}/{{ db_version }}/data --locale=en_US.UTF-8
-  args:
-    executable: /bin/bash
-  tags:
-    - postgresql-all
-    - postgresql-initdb
+#- name: Init DB
+#  become: true
+#  become_user: postgres
+#  when:
+#    - not pgdata_dir_version.stat.exists
+#    - ansible_distribution != "Amazon"
+#  shell: /usr/pgsql-{{ db_version }}/bin/initdb -D {{ db_dir }}/{{ db_version }}/data --locale=en_US.UTF-8
+#  args:
+#    executable: /bin/bash
+#  tags:
+#    - postgresql-all
+#    - postgresql-initdb
 
 # Install PostgreSQL Python driver for Amazon Linux 2
 - name: Install aws-psycopg2
@@ -229,28 +229,28 @@
     - postgresql-initdb
 
 # Remove default PostgreSQL data directory
-- name: Delete default pgsql directory
-  file:
-    path: "/var/lib/pgsql"
-    state: absent
-  when:
-    - not pgdata_dir_version.stat.exists
-  tags:
-    - postgresql-all
-    - postgresql-create-dirs
-
-# Create symlink to custom PostgreSQL data directory
-- name: Create link to pgsql directory
-  file:
-    src: "{{ db_dir }}"
-    dest: "/var/lib/pgsql"
-    state: link
-    owner: postgres
-    group: postgres
-    mode: 0700
-  tags:
-    - postgresql-all
-    - postgresql-create-dirs
+#- name: Delete default pgsql directory
+#  file:
+#    path: "/var/lib/pgsql"
+#    state: absent
+#  when:
+#    - not pgdata_dir_version.stat.exists
+#  tags:
+#    - postgresql-all
+#    - postgresql-create-dirs
+#
+## Create symlink to custom PostgreSQL data directory
+#- name: Create link to pgsql directory
+#  file:
+#    src: "{{ db_dir }}"
+#    dest: "/var/lib/pgsql"
+#    state: link
+#    owner: postgres
+#    group: postgres
+#    mode: 0700
+#  tags:
+#    - postgresql-all
+#    - postgresql-create-dirs
 
 # Deploy PostgreSQL user environment settings
 - name: Add .bashrc file
