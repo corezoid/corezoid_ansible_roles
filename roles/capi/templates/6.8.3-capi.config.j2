@@ -636,6 +636,10 @@
         {host, <<"http://{{ capi_es_host }}">>},
         {port, 9200},
 {% endif %}
+{% if elasticsearch.elastic_password is defined and elasticsearch.elastic_password %}
+        {username, <<"{{ elasticsearch.elastic_username | default('elastic') }}">>},
+        {password, <<"{{ elasticsearch.elastic_password }}">>},
+{% endif %}
         {timeout, 5000}
     ]},
 
