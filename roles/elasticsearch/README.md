@@ -29,6 +29,8 @@ elasticsearch:
   es_dir_owner: "elasticsearch"
   es_cluster_list: "127.0.0.1"
   heap_size: "2g" # ram allocation parameter
+  elastic_username: "elastic"
+  elastic_password: "Corezidtest"
 
 ```
 
@@ -40,6 +42,8 @@ elasticsearch:
 - `elasticsearch-install-main-dir`: Directory setup
 - `elasticsearch-nginx-setup`: Nginx configuration
 - `elasticsearch-monit`: Monitoring configuration
+- `elasticsearch-security` : Add password elasticsearch
+
 
 ## Usage Examples
 

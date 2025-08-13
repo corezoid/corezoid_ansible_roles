@@ -3,4 +3,8 @@ check process elasticsearch with pidfile /var/run/elasticsearch/elasticsearch.pi
   stop program = "/bin/systemctl stop elasticsearch"
   if cpu > 90% for 15 cycles then alert
   if memory > 90% for 15 cycles then restart
+  {% if elasticsearch.elastic_password | default(false) %}
+  ##if failed port 9200 protocol http for 3 cycles then restart
+  {% else %}
   if failed port 9200 protocol http for 3 cycles then restart
+  {% endif %}

@@ -263,3 +263,57 @@
   tags:
     - elasticsearch-all
     - elasticsearch-monit
+
+- name: Flush handlers
+  meta: flush_handlers
+  when: elasticsearch.elastic_password is defined
+  tags:
+    - elasticsearch-all
+    - elasticsearch-security
+
+# Теперь ждем готовности Elasticsearch после перезапуска
+- name: Wait for Elasticsearch to be ready after restart
+  wait_for:
+    port: "{{ elasticsearch_port }}"
+    host: localhost
+    delay: 30  # Даем время на полный запуск
+    timeout: 300
+  when: elasticsearch.elastic_password is defined
+  tags:
+    - elasticsearch-all
+    - elasticsearch-security
+
+- name: Install expect for password automation
+  yum:
+    name: expect
+    state: present
+  when: elasticsearch.elastic_password is defined
+  tags:
+    - elasticsearch-all
+    - elasticsearch-security
+
+# Используйте простой expect one-liner
+- name: Set elastic password using expect
+  shell: |
+    expect -c '
+    spawn /usr/share/elasticsearch/bin/elasticsearch-reset-password -u {{ elasticsearch.elastic_username }} -i
+    expect "Please confirm*"
+    send "y\r"
+    expect "Enter password*"
+    send "{{ elasticsearch.elastic_password }}\r"
+    expect "Re-enter password*"
+    send "{{ elasticsearch.elastic_password }}\r"
+    expect eof
+    '
+  when:
+    - elasticsearch.elastic_password is defined
+  tags:
+    - elasticsearch-all
+    - elasticsearch-security
+
+- name: Flush handlers
+  meta: flush_handlers
+  when: elasticsearch.elastic_password is defined
+  tags:
+    - elasticsearch-all
+    - elasticsearch-security
