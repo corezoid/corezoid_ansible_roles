@@ -499,7 +499,7 @@ CREATE TABLE public.env_vars (
     status smallint DEFAULT 1,
     stage_id integer DEFAULT 0 NOT NULL,
     uuid character varying(36) DEFAULT NULL::character varying,
-    name_temp character varying(36),
+    name_temp character varying(255),
     description_temp text,
     status_temp smallint,
     short_name_temp character varying(128),
