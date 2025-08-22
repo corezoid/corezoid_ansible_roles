@@ -153,6 +153,12 @@ capi_redis2_start_size: 10
 capi_redis2_min_size: 10
 capi_redis2_max_size: 100
 
+# Parameters for simulator widgets
+simulator_widgets: "true"
+simulator_widgets_src: "https://mw-widget.example.com/shim.js"
+simulator_widgets_actor_id: "80182555-3984-4375-842d-xxxxxxxxxxxx"
+simulator_widgets_workspace_whitelist: '<<"a58d969b-4b2f-42ce-add5-xxxxx">>'
+
 ```
 
 ## Templates

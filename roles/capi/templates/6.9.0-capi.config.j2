@@ -554,6 +554,16 @@
 {% if capi_auth_single_account is defined and capi_auth_single_account == "true" %}
         {is_single_account, true},
 {% endif %}
+{% if simulator_widgets is defined and simulator_widgets == "true" %}
+        {widgets, [
+          {editor_ai, [
+            {enabled, true},
+            {src, <<"{{ simulator_widgets_src }}">>},
+            {actor_id, <<"{{ simulator_widgets_actor_id }}">>},
+            {workspace_whitelist, [{{ simulator_widgets_workspace_whitelist }}]}
+          ]}
+        ]},
+{% endif %}
         {env, <<"prod">>}, %% Available test|pre|prod
         {host, [
           {site, <<"{{ capi_endpoint }}">>},  %% main page (navigate by clicking on the corezoid logo)

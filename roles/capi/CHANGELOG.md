@@ -37,3 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RHEL/CentOS 7, 8, 9
 - Amazon Linux 2
 - Amazon Linux 2023
+
+## [1.1.1] - 2025-22-08
+
+### Added
+- added block widgets for capi.config
+
+### Changes
+- box.yml add simulator_widgets block for README
+
