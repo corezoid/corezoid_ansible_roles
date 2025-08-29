@@ -560,7 +560,11 @@
             {enabled, true},
             {src, <<"{{ simulator_widgets_src }}">>},
             {actor_id, <<"{{ simulator_widgets_actor_id }}">>},
+{% if simulator_widgets_workspace_whitelist == '<<"all">>' %}
+            {workspace_whitelist, <<"all">>}
+{% else %}
             {workspace_whitelist, [{{ simulator_widgets_workspace_whitelist }}]}
+{% endif %}
           ]}
         ]},
 {% endif %}
