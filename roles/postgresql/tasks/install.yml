@@ -309,11 +309,27 @@
 # Start PostgreSQL service on Amazon Linux 2023
 - name: Start database service AMI3
   block:
-    - name: Change Path
-      lineinfile:
-        path: /usr/lib/systemd/system/postgresql.service
-        regexp: '^Environment=PGDATA='
-        line: 'Environment=PGDATA=/postgresqldata/pgsql/{{ db_ver }}/data/'
+    - name: Create systemd drop-in directory
+      file:
+        path: /etc/systemd/system/postgresql.service.d
+        state: directory
+        mode: 0755
+        owner: root
+        group: root
+    - name: Create PGDATA override configuration
+      copy:
+        content: |
+          [Service]
+          Environment="PGDATA=/postgresqldata/pgsql/{{ db_ver }}/data/"
+        dest: /etc/systemd/system/postgresql.service.d/{{ db_ver }}-pgdata.conf
+        owner: root
+        group: root
+        mode: 0644
+   # - name: Change Path
+    #  lineinfile:
+    #    path: /usr/lib/systemd/system/postgresql.service
+    #    regexp: '^Environment=PGDATA='
+    #    line: 'Environment=PGDATA=/postgresqldata/pgsql/{{ db_ver }}/data/'
       #shell: sudo sed 's|Environment=PGDATA=/var/lib/pgsql/data|Environment=PGDATA=/postgresqldata/pgsql/{{ db_ver }}/data/|' /usr/lib/systemd/system/postgresql.service
     - name: Reload systemctl
       shell: systemctl daemon-reload
