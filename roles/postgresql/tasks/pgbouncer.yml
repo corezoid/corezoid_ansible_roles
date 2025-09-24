@@ -82,7 +82,7 @@
 # Install PgBouncer for Amazon Linux 2023
 # Set Redis package facts based on system
 # Determines appropriate pgbouncer RPM package based on OS distribution, version and architecture
-- name: Set Redis package facts
+- name: Set PGbouncer package facts
   set_fact:
     pgbouncer_rpm_file: >-
       {{ {
@@ -93,7 +93,7 @@
 
 # Copy pgbouncer package to the target system
 # Transfers the appropriate pgbouncer RPM package with proper ownership and permissions
-- name: Copy redis Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+- name: Copy pgbouncer Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
   copy:
     src: "files/{{ pgbouncer_rpm_file }}"
     dest: "/tmp/{{ pgbouncer_rpm_file }}"

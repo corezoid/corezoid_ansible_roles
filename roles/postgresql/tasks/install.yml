@@ -91,6 +91,92 @@
     - postgresql-all
     - postgresql-install-packages
 
+# Install Pglibs for Amazon Linux 2023
+# Determines appropriate pgbouncer RPM package based on OS distribution, version and architecture
+- name: Set Pg_libs package facts
+  set_fact:
+    pg_libs_rpm_file: >-
+      {{ {
+        'Amazon-2023-x86_64': [
+          'pg_repack_15-1.5.0-1PGDG.rhel9.aarch64.rpm',
+          'pglogical_15-2.4.3-1.rhel9.aarch64.rpm',
+          'pglogical_15-llvmjit-2.4.3-1.rhel9.aarch64.rpm'
+        ],
+        'Amazon-2023-aarch64': [
+           'pg_repack_15-1.5.0-1PGDG.rhel9.aarch64.rpm',
+           'pglogical_15-2.4.3-1.rhel9.aarch64.rpm',
+           'pglogical_15-llvmjit-2.4.3-1.rhel9.aarch64.rpm'
+        ]
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+
+
+# Copy pglibs package to the target system
+# Transfers the appropriate pgbouncer RPM package with proper ownership and permissions
+- name: Copy pglibs Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  copy:
+    src: "files/{{ item }}"
+    dest: "/tmp/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ pg_libs_rpm_file }}"
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+# Install pgbouncer using YUM package manager
+# Executes YUM to install pgbouncer package, continues on errors for resilience
+- name: Install pglibs Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  command: yum install /tmp/{{ item }} -y
+  ignore_errors: true
+  loop: "{{ pg_libs_rpm_file }}"
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+# Clean up the installation package
+# Removes temporary RPM file after installation is complete
+- name: Remove pglibs Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  file:
+    path: "/tmp/{{ item }}"
+    state: absent
+  loop: "{{ pg_libs_rpm_file }}"
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+#Create pglogical symlinks
+- name: Create pglogical symlinks for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  file:
+    src: "/usr/pgsql-15/lib/{{ item }}"
+    dest: "/usr/lib64/pgsql/{{ item }}"
+    state: link
+    force: yes
+  loop:
+    - pglogical.so
+    - pglogical_output.so
+    - pg_repack.so
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+#Create pgrepack symlinks
+- name: Create pgrepack symlinks for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  file:
+    src: "/usr/pgsql-15/bin/pg_repack"
+    dest: "//usr/bin/pg_repack"
+    state: link
+    force: yes
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+  tags:
+    - postgresql-all
+    - postgresql-install-packages
+
+
 # Enable PostgreSQL service on Amazon Linux 2023
 - name: enable postgresql to survive reboot
   service: name={{ item }} enabled=yes
