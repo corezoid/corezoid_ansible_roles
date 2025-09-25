@@ -168,7 +168,7 @@
 - name: Create pgrepack symlinks for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
   file:
     src: "/usr/pgsql-15/bin/pg_repack"
-    dest: "//usr/bin/pg_repack"
+    dest: "/usr/bin/pg_repack"
     state: link
     force: yes
   when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
