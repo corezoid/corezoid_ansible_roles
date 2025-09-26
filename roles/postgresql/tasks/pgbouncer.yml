@@ -62,8 +62,8 @@
   block:
     - name: remove python37
       shell: yum remove python3* -y
-    - name: python36 installation
-      shell: sudo yum install /tmp/ius-release-el7.rpm -y
+    # - name: python36 installation
+    #   shell: sudo yum install /tmp/ius-release-el7.rpm -y
     - name:  python36 installation
       shell: yum install python36 -y
 #    - name: enable python3
