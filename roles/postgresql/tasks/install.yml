@@ -98,9 +98,9 @@
     pg_libs_rpm_file: >-
       {{ {
         'Amazon-2023-x86_64': [
-          'pg_repack_15-1.5.0-1PGDG.rhel9.aarch64.rpm',
-          'pglogical_15-2.4.3-1.rhel9.aarch64.rpm',
-          'pglogical_15-llvmjit-2.4.3-1.rhel9.aarch64.rpm'
+          'pg_repack_15-1.5.0-1PGDG.rhel9.x86_64.rpm',
+          'pglogical_15-2.4.3-1.rhel9.x86_64.rpm',
+          'pglogical_15-llvmjit-2.4.3-1.rhel9.x86_64.rpm'
         ],
         'Amazon-2023-aarch64': [
            'pg_repack_15-1.5.0-1PGDG.rhel9.aarch64.rpm',
