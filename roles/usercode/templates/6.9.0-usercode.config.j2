@@ -152,6 +152,8 @@
         {cnode_max_used_per_isolate, {{ usercode_cnode_max_used_per_isolate | default(10) }}}, %% for supporting 2.2.1 version
         {cnode_max_used_per_isolate_mb, {{ cnode_max_used_per_isolate_mb | default(20) }}}, %% in Mb
 
+        {cnode_socket_buffer_size_mb, {{ cnode_socket_buffer_size_mb | default(20) }}}, %% in Mb (read, write socket buffers)
+
         {show_err_resps, false},
         {show_ok_resps, false},
 

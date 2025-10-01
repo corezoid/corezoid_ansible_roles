@@ -29,6 +29,27 @@
     - usercode-all
     - usercode-install
 
+# Configure network kernel parameters
+- name: Configure sysctl parameters in /etc/sysctl.conf
+  lineinfile:
+    path: /etc/sysctl.conf
+    line: "{{ item }}"
+    state: present
+  loop:
+    - "net.core.rmem_max = 209715200"
+    - "net.core.wmem_max = 209715200"
+  tags:
+    - usercode-all
+    - usercode-sysctl
+    - usercode-install
+
+- name: Apply sysctl parameters
+  command: sysctl -p
+  tags:
+    - usercode-all
+    - usercode-sysctl
+    - usercode-install
+
 # Create all required directories in a single task using a loop
 - name: Create application directories
   file:
