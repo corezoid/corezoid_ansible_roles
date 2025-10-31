@@ -190,12 +190,13 @@
     group: root
     mode: 0755
   when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8"
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux" or ansible_distribution == "Amazon"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
   tags:
     - pgsql-all
     - pgsql-pgbouncer
     - pgsql-pgbouncer-systemd
+    - pgsql-pgbouncer-limits
 
 # Configure PgBouncer
 - name: Add systemd limits.conf for PgBouncer
@@ -206,13 +207,14 @@
   with_items:
     - "limits.conf"
   when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8"
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux" or ansible_distribution == "Amazon"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
   register: pgbouncer_systemd_file
   tags:
     - pgsql-all
     - pgsql-pgbouncer
     - pgsql-pgbouncer-systemd
+    - pgsql-pgbouncer-limits
 
 # Configure PgBouncer
 - name: Reload systemd-daemon if pgbouncer_systemd_file changed
@@ -225,6 +227,7 @@
     - pgsql-all
     - pgsql-pgbouncer
     - pgsql-pgbouncer-systemd
+    - pgsql-pgbouncer-limits
 
 # - name: pgbouncer configuration, get hash for user - {{ db_app_user }}
 #   shell: psql -h {{ db_main_host }} -p {{ init_db_port }} -U {{ db_superuser_login }} postgres -Atc "select 'md5' || md5 ('{{ db_app_user_pass }}' || '{{ db_app_user }}')"
