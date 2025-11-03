@@ -153,6 +153,8 @@
     - accounts
     - limits
     - corezoid_counters
+    - graphinstaller
+    - apigw
   tags:
     - pgsql-all
     - pgsql-create-main-dbs
@@ -166,6 +168,9 @@
     owner={{ db_main.user }}
   with_items:
     - accounts
+    - graphinstaller
+    - git_call
+    - apigw
   tags:
     - pgsql-all
     - pgsql-create-main-dbs

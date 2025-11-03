@@ -131,6 +131,8 @@
     - git_call
     - accounts
     - corezoid_counters
+    - graphinstaller
+    - apigw
   tags:
     - rds-all
     - rds-create-main-dbs
@@ -147,6 +149,9 @@
     owner={{ db_main.user }}
   with_items:
     - accounts
+    - graphinstaller
+    - git_call
+    - apigw
   tags:
     - rds-all
     - rds-create-main-dbs
