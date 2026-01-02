@@ -61,6 +61,11 @@
             {host, "{{ redis_cache[0].host }}"},
             {port, {{ redis_cache[0].port }}},
             {database, 9},
+{% if redis_tls | default("false") == "true" %}
+            {ssl, [
+               {tls, true}
+            ]},
+{% endif %}
             {password, "{{ redis_cache_password | default("") }}"}
         ]}
     ]},
@@ -70,6 +75,11 @@
             [
                 {host, "{{ redis_cache[0].host }}"},
                 {port, {{ redis_cache[0].port }}},
+{% if redis_tls | default("false") == "true" %}
+                {ssl, [
+                   {tls, true}
+                ]},
+{% endif %}
                 {database, 11},
                 {password, "{{ redis_cache[0].password }}"},
                 {start_size, 2},
@@ -118,6 +128,11 @@
             {host, "{{ redis_cache[0].host }}"},
             {port, {{ redis_cache[0].port }}},
             {database, 10},
+{% if redis_tls | default("false") == "true" %}
+            {ssl, [
+               {tls, true}
+            ]},
+{% endif %}
             {password, "{{ redis_cache_password | default("") }}"}
         ]}
     ]},
@@ -172,6 +187,11 @@
               {host, "{{ item.host }}"},
               {port, {{ item.port }}},
               {database,{{ item.db }}},
+{% if redis_tls | default("false") == "true" %}
+              {ssl, [
+                 {tls, true}
+              ]},
+{% endif %}
               {password,"{{ item.password }}"},
               {start_size, 1},
               {min_size, 1},
@@ -195,6 +215,11 @@
               {host, "{{ item.host }}"},
               {port, {{ item.port }}},
               {database,{{ item.db }}},
+{% if redis_tls | default("false") == "true" %}
+              {ssl, [
+                 {tls, true}
+              ]},
+{% endif %}
               {password,"{{ item.password }}"},
               {start_size, 10},
               {min_size, 10},
@@ -468,6 +493,11 @@
                     {port, {{ item.port }}},
                     {database,{{ item.db }}},
                     {password,"{{ item.password }}"},
+{% if redis_tls | default("false") == "true" %}
+                    {ssl, [
+                       {tls, true}
+                    ]},
+{% endif %}
                     {start_size, {{ redis_conn_pool_start | default(10) }}},
                     {min_size, {{ redis_conn_pool_min | default(10) }}},
                     {max_size, {{ redis_conn_pool_max | default(100) }}}
@@ -487,6 +517,11 @@
           {host, "{{ item.host }}"},
           {port, {{ item.port }}},
           {database, {{ item.db }}},
+{% if redis_tls | default("false") == "true" %}
+          {ssl, [
+             {tls, true}
+          ]},
+{% endif %}
           {password, "{{ item.password }}"},
           {start_size, {{ redis_api_sum_pool_start | default(5) }}},
           {min_size, {{ redis_api_sum_pool_min | default(5) }}},
@@ -506,6 +541,11 @@
           {host, "{{ item.host }}"},
           {port, {{ item.port }}},
           {database, {{ item.db }}},
+{% if redis_tls | default("false") == "true" %}
+          {ssl, [
+             {tls, true}
+          ]},
+{% endif %}
           {password, "{{ item.password }}"},
           {start_size, {{ redis2_conn_pool_start | default(50) }}},
           {min_size, {{ redis2_conn_pool_min | default(50) }}},
@@ -525,6 +565,11 @@
           {host, "{{ item.host }}"},
           {port, {{ item.port }}},
           {database, {{ item.db }}},
+{% if redis_tls | default("false") == "true" %}
+          {ssl, [
+             {tls, true}
+          ]},
+{% endif %}
           {password, "{{ item.password }}"},
           {min_size, {{ redis_timers_conn_pool_min | default(10) }}},
           {max_size, {{ redis_timers_conn_pool_max | default(200) }}},

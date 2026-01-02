@@ -134,6 +134,11 @@
       {host, "{{ redis_cache[0].host }}"},
       {port, {{ redis_cache[0].port }}},
       {database, 10},
+{% if redis_tls | default("false") == "true" %}
+        {ssl, [
+           {tls, true}
+        ]},
+{% endif %}
       {password, "{{ redis_cache_password | default("") }}"}
     ]}
   ]},
@@ -234,6 +239,11 @@
         {host, "{{ item.host }}"},
         {port, {{ item.port }}},
         {database,{{ item.db }}},
+{% if redis_tls | default("false") == "true" %}
+        {ssl, [
+           {tls, true}
+        ]},
+{% endif %}
         {password,"{{ item.password }}"},
         {start_size, 50},
         {min_size, 50},

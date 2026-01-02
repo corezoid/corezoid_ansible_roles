@@ -23,6 +23,7 @@ Ansible role for installing and configuring Redis.
 
 ```yaml
 redis_version: "7.2.4"
+redis_tls: "false"  
 
 redis_counters_host: "127.0.0.1"
 redis_counter_name: "redis-counters"
