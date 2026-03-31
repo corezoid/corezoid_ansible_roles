@@ -1137,7 +1137,7 @@
           {host, '{{ rmq_host }}'},
           {port, {{ rmq_port }}},
           {exchange, <<"FinalTasksLogsExchange">>},
-          {queue, <<"FinalTasksLogsQ{{=i}}">>},
+          {queue, <<"{% raw %}FinalTasksLogsQ{{=i}}{% endraw %}">>},
           {queues_count, 4},
           {username, <<"{{ rmq_user }}">>},
           {password, <<"{{ rmq_user_pass }}">>},
