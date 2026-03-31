@@ -1131,6 +1131,24 @@
         {messages_prefetch_size_per_channel, {{ cons_shard_msg_prefetch_size }}}
       ]},
 
+{% if worker_converter_is_enabled | default("false") == "true" %}
+      %% plugins unload archive task
+      {plugins_unload_archive_task, [
+          {host, '{{ rmq_host }}'},
+          {port, {{ rmq_port }}},
+          {exchange, <<"FinalTasksLogsExchange">>},
+          {queue, <<"FinalTasksLogsQ{{=i}}">>},
+          {queues_count, 4},
+          {username, <<"{{ rmq_user }}">>},
+          {password, <<"{{ rmq_user_pass }}">>},
+          {vhost, <<"{{ rmq_vhost }}">>},
+          {thread_count, 10},
+          {connections_per_queue, 5},
+          {channels_per_connection, 2},
+          {messages_prefetch_size_per_channel, 2}
+      ]},
+{% endif %}
+
       %% publish git_call request
       {publish_git_call_request, [
         {servers, [[
