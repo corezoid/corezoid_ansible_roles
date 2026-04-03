@@ -1,0 +1,98 @@
+---
+# tasks file for worker_converter
+
+- name: Set service name variable
+  set_fact:
+    service_name: "worker_converter"
+  tags:
+    - always
+
+- name: Create worker_converter yum repo
+  template:
+    src: "templates/corezoid-worker-converter.repo.j2"
+    dest: /etc/yum.repos.d/corezoid-worker-converter.repo
+    owner: root
+    group: root
+    mode: "0644"
+  tags:
+    - worker-converter-all
+    - worker-converter-install
+
+- name: Yum clean all
+  command: yum clean all
+  tags:
+    - worker-converter-all
+    - worker-converter-install
+
+- name: Install worker_converter app
+  yum:
+    name: "{{ service_name }}-{{ worker_converter.version }}"
+    state: present
+    update_cache: yes
+    disablerepo: "*"
+    enablerepo: "corezoid-worker-converter"
+  tags:
+    - worker-converter-all
+    - worker-converter-install
+
+- name: Create application directories
+  file:
+    path: "{{ item.path }}"
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    state: directory
+    mode: "{{ item.mode }}"
+    recurse: "{{ item.recurse }}"
+  loop:
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}/log", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0755", recurse: no }
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}/internal_db", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0755", recurse: no }
+    - { path: "{{ conf_dir }}", owner: "root", group: "root", mode: "0755", recurse: no }
+    - { path: "{{ top_dir }}/erlang/{{ service_name }}", owner: "{{ app_user }}", group: "{{ app_user }}", mode: "0700", recurse: yes }
+  tags:
+    - worker-converter-all
+    - worker-converter-install
+    - worker-converter-config
+
+- name: Create worker_converter.config file
+  template:
+    src: "templates/{{ worker_converter.version }}-worker_converter.config.j2"
+    dest: "{{ worker_converter.config }}"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0500"
+  tags:
+    - worker-converter-all
+    - worker-converter-config
+    - worker-converter-config-file
+
+- name: Enable worker_converter to survive reboot
+  service:
+    name: "{{ service_name }}"
+    enabled: yes
+    state: started
+  tags:
+    - worker-converter-all
+    - worker-converter-start
+
+- name: Create monit file
+  template:
+    src: "templates/{{ item }}.monit.j2"
+    dest: "/etc/monit.d/{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  with_items:
+    - worker_converter
+  register: monit_file
+  tags:
+    - worker-converter-all
+    - worker-converter-monit
+
+- name: Reload monit if config file changed
+  service:
+    name: monit
+    state: reloaded
+  when: monit_file.changed
+  tags:
+    - worker-converter-all
+    - worker-converter-monit

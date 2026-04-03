@@ -1,0 +1,17 @@
+galaxy_info:
+  author: Ozerov Vladymyr
+  description: Worker Converter application deployment
+  company: Middleware Inc.
+  license: commercial license
+  min_ansible_version: 2.13.5
+  platforms:
+    - name: EL
+      versions:
+        - "9"
+    - name: Amazon
+      versions:
+        - "2023"
+
+  galaxy_tags: []
+
+dependencies: []
