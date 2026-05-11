@@ -1,0 +1,10 @@
+# /etc/sysconfig/atop - managed by Ansible
+
+# Interval between each sample in seconds (minimum 1)
+LOGINTERVAL={{ atop_interval }}
+
+# Number of daily log files to keep
+LOGGENERATIONS={{ atop_log_generations }}
+
+# Additional flags passed to atop daemon
+LOGOPTS="{{ atop_logo_opts }}"

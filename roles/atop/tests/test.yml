@@ -1,0 +1,5 @@
+---
+- hosts: mw310896vzv-box1
+  become: true
+  roles:
+    - atop

@@ -1,0 +1,64 @@
+---
+# tasks file for atop
+
+- name: Install atop package
+  ansible.builtin.yum:
+    name: atop
+    state: present
+    update_cache: yes
+  tags:
+    - atop-all
+    - atop-install
+
+- name: Create atop log directory
+  file:
+    path: "{{ atop_log_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  tags:
+    - atop-all
+    - atop-install
+
+- name: Deploy atop sysconfig
+  template:
+    src: templates/atop.j2
+    dest: /etc/sysconfig/atop
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart atop
+  tags:
+    - atop-all
+    - atop-config
+
+- name: Deploy atop logrotate config
+  template:
+    src: templates/atop-logrotate.j2
+    dest: /etc/logrotate.d/atop
+    owner: root
+    group: root
+    mode: "0644"
+  tags:
+    - atop-all
+    - atop-config
+
+
+- name: Enable atop-rotate timer
+  systemd:
+    name: atop-rotate.timer
+    enabled: yes
+    state: started
+  tags:
+    - atop-all
+    - atop-service
+
+- name: Enable and start atop service
+  systemd:
+    name: atop
+    enabled: yes
+    state: started
+  tags:
+    - atop-all
+    - atop-service

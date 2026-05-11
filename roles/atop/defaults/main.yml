@@ -1,0 +1,14 @@
+---
+# defaults file for atop
+
+# Interval between samples in seconds
+atop_interval: 5
+
+# Directory for binary log files
+atop_log_path: /var/log/atop
+
+# Number of daily log files to retain
+atop_log_generations: 28
+
+# Additional atop flags (e.g. "-R" for no colors in log)
+atop_logo_opts: ""

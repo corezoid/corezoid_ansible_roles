@@ -1,0 +1,51 @@
+---
+- hosts: mw310896vzv-box1
+  become: true
+
+  tasks:
+    - name: Stop and disable atop service
+      systemd:
+        name: atop
+        state: stopped
+        enabled: no
+      ignore_errors: true
+
+    - name: Stop and disable atop-rotate timer
+      systemd:
+        name: atop-rotate.timer
+        state: stopped
+        enabled: no
+      ignore_errors: true
+
+    - name: Remove atop package
+      ansible.builtin.yum:
+        name: atop
+        state: absent
+
+    - name: Remove atop sysconfig
+      file:
+        path: /etc/sysconfig/atop
+        state: absent
+
+    - name: Remove atop logrotate config
+      file:
+        path: /etc/logrotate.d/atop
+        state: absent
+
+    - name: Remove atop log directory
+      file:
+        path: /var/log/atop
+        state: absent
+
+    - name: Remove custom atop systemd unit file
+      file:
+        path: /etc/systemd/system/atop.service
+        state: absent
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+
+    - name: Reset failed atop service state
+      command: systemctl reset-failed atop.service
+      ignore_errors: true
