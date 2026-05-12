@@ -1,0 +1,107 @@
+---
+# CVE-2026-31431 (Copy Fail): unprivileged AF_ALG -> authencesn -> 4-byte
+# write into page cache of setuid binaries -> local privilege escalation.
+# Mitigation: blacklist algif_aead module and unload it at runtime.
+
+- name: CVE-2026-31431 | Preflight — effective blacklist (modprobe --showconfig)
+  ansible.builtin.shell: |
+    set -o pipefail
+    modprobe --showconfig 2>/dev/null \
+      | grep -E '^(install|blacklist)[[:space:]]+algif_aead([[:space:]]|$)' \
+      || true
+  args:
+    executable: /bin/bash
+  register: algif_aead_blacklist_cfg
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  tags:
+    - system-all
+    - system-cve-2026-31431
+
+- name: CVE-2026-31431 | Preflight — module load state
+  ansible.builtin.shell: |
+    set -o pipefail
+    lsmod | awk '{print $1}' | grep -Fx algif_aead
+  args:
+    executable: /bin/bash
+  register: algif_aead_loaded
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  tags:
+    - system-all
+    - system-cve-2026-31431
+
+- name: CVE-2026-31431 | Preflight — compute mitigation status
+  ansible.builtin.set_fact:
+    algif_aead_already_mitigated: >-
+      {{ (algif_aead_blacklist_cfg.stdout | trim | length > 0)
+         and (algif_aead_loaded.rc != 0) }}
+  tags:
+    - system-all
+    - system-cve-2026-31431
+
+- name: CVE-2026-31431 | Preflight — report status
+  ansible.builtin.debug:
+    msg:
+      - "algif_aead blacklist config: {{ algif_aead_blacklist_cfg.stdout | trim | default('(none)', true) }}"
+      - "algif_aead currently loaded: {{ algif_aead_loaded.rc == 0 }}"
+      - "appears mitigated (informational): {{ algif_aead_already_mitigated }}"
+  tags:
+    - system-all
+    - system-cve-2026-31431
+
+- name: CVE-2026-31431 | Persist algif_aead blacklist
+  ansible.builtin.copy:
+    dest: /etc/modprobe.d/disable-algif-aead.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # CVE-2026-31431 (Copy Fail) — AF_ALG AEAD privesc via authencesn.
+      # Managed by ansible/roles/system. Do not edit by hand.
+      install algif_aead /bin/false
+      blacklist algif_aead
+  tags:
+    - system-all
+    - system-cve-2026-31431
+
+- name: CVE-2026-31431 | Unload algif_aead
+  ansible.builtin.command: rmmod algif_aead
+  when: algif_aead_loaded.rc == 0
+  register: algif_aead_unload
+  changed_when: algif_aead_unload.rc == 0
+  failed_when:
+    - algif_aead_unload.rc != 0
+    - "'is not currently loaded' not in (algif_aead_unload.stderr | default(''))"
+  tags:
+    - system-all
+    - system-cve-2026-31431
+
+- name: CVE-2026-31431 | Verify algif_aead is not loaded and load is blocked
+  ansible.builtin.shell: |
+    set -o pipefail
+    fail=0
+    if lsmod | awk '{print $1}' | grep -Fx algif_aead >/dev/null; then
+      echo "FAIL: algif_aead still loaded (likely held by a process); reboot required" >&2
+      fail=1
+    fi
+    cfg=$(modprobe --showconfig 2>/dev/null \
+            | grep -E '^install[[:space:]]+algif_aead[[:space:]]+/(usr/)?bin/false([[:space:]]|$)' \
+            || true)
+    if [ -z "$cfg" ]; then
+      echo "FAIL: 'install algif_aead /bin/false' not found in effective modprobe config" >&2
+      echo "Current algif_aead-related lines in modprobe config:" >&2
+      modprobe --showconfig 2>/dev/null | grep algif_aead >&2 \
+        || echo "(none)" >&2
+      fail=1
+    fi
+    exit $fail
+  args:
+    executable: /bin/bash
+  changed_when: false
+  check_mode: false
+  tags:
+    - system-all
+    - system-cve-2026-31431

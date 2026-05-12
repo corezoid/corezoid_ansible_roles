@@ -210,6 +210,12 @@
     - system-all
     - system-rpm
 
+- name: Mitigate CVE-2026-31431 (Copy Fail) — disable algif_aead
+  import_tasks: disable_algif_aead.yml
+  tags:
+    - system-all
+    - system-cve-2026-31431
+
 - name: Setup monit
   import_tasks: monit.yml
   tags:
