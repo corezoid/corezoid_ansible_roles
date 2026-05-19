@@ -1,6 +1,13 @@
 # Ansible Role: atop
 
-Installs and configures the `atop` system monitor. Writes binary performance logs to disk at a configurable interval and manages log rotation.
+Installs and configures the `atop` system monitor. Writes binary performance logs to disk at a configurable interval, rotates them daily, and prunes/compresses old files.
+
+## Log lifecycle
+
+Responsibility is split between two mechanisms:
+
+- **`atop-rotate.timer`** (shipped with the atop package): restarts the daemon at 00:00 daily, which causes atop to open a new `atop_YYYYMMDD` file. This is the actual *rotation*.
+- **`/etc/logrotate.d/atop`** (deployed by this role): runs daily via `logrotate.timer`/`cron.daily`, compresses prior `atop_*` files with gzip, and deletes any older than `atop_log_generations` days. The packaged `atop-rotate.service` does **not** clean up old files on its own — `LOGGENERATIONS` from `/etc/sysconfig/atop` is honoured only via this logrotate config.
 
 ## Supported Platforms
 
@@ -22,7 +29,7 @@ Variables are defined in `defaults/main.yml` — the lowest priority, overridabl
 |---|---|---|
 | `atop_interval` | `5` | Sample interval in seconds |
 | `atop_log_path` | `/var/log/atop` | Directory for binary log files |
-| `atop_log_generations` | `28` | Days of logs to retain (logrotate) |
+| `atop_log_generations` | `3` | Days of logs to retain (enforced by logrotate) |
 | `atop_logo_opts` | `""` | Extra flags passed to the atop daemon |
 
 ### Where variables are stored
@@ -69,7 +76,7 @@ Variable priority (highest → lowest): `--extra-vars` > playbook vars > host_va
 |---|---|
 | `atop-all` | Run all tasks |
 | `atop-install` | Install package and create log directory |
-| `atop-config` | Deploy sysconfig and logrotate configs |
+| `atop-config` | Deploy sysconfig and logrotate config |
 | `atop-service` | Enable and start systemd services |
 
 Run only specific stages:
@@ -139,9 +146,11 @@ ansible-playbook \
 ```bash
 systemctl status atop
 systemctl status atop-rotate.timer
-cat /etc/sysconfig/atop          # check LOGINTERVAL=5
-cat /etc/logrotate.d/atop        # check rotation config
-ls -la /var/log/atop/            # check log files are being written
+cat /etc/sysconfig/atop                       # check LOGINTERVAL=5
+cat /etc/logrotate.d/atop                     # check logrotate stanza
+ls -la /var/log/atop/                         # check log files are being written
+systemctl list-timers atop-rotate.timer       # daily daemon restart
+logrotate -d /etc/logrotate.d/atop            # dry-run: see what cleanup would do
 ```
 
 ---

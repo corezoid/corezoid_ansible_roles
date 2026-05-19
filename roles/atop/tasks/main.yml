@@ -21,6 +21,19 @@
     - atop-all
     - atop-install
 
+- name: Ensure logrotate stamp file exists
+  file:
+    path: "{{ atop_log_path }}/.logrotate-stamp"
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+    modification_time: preserve
+    access_time: preserve
+  tags:
+    - atop-all
+    - atop-install
+
 - name: Deploy atop sysconfig
   template:
     src: templates/atop.j2
@@ -43,7 +56,6 @@
   tags:
     - atop-all
     - atop-config
-
 
 - name: Enable atop-rotate timer
   systemd:

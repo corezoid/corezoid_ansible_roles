@@ -8,7 +8,7 @@ atop_interval: 5
 atop_log_path: /var/log/atop
 
 # Number of daily log files to retain
-atop_log_generations: 28
+atop_log_generations: 3
 
 # Additional atop flags (e.g. "-R" for no colors in log)
 atop_logo_opts: ""

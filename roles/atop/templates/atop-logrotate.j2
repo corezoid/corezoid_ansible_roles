@@ -1,14 +1,22 @@
 # /etc/logrotate.d/atop - managed by Ansible
-{{ atop_log_path }}/atop_* {
-    rotate {{ atop_log_generations }}
+#
+# atop-rotate.timer restarts the daemon at 00:00 daily, which opens a new
+# atop_YYYYMMDD log file. This logrotate config only compresses yesterday's
+# (and older) files and deletes ones beyond {{ atop_log_generations }} days.
+#
+# The stanza targets a stamp file rather than atop_* directly, so logrotate
+# never renames the daemon's open log. All work is done in lastaction.
+
+{{ atop_log_path }}/.logrotate-stamp {
     daily
     missingok
-    notifempty
-    compress
-    nodelaycompress
-    nocreate
+    nocompress
+    copy
+    rotate 1
     sharedscripts
-    postrotate
-        systemctl -q is-active atop && systemctl restart atop || true
+    lastaction
+        TODAY=$(date +%Y%m%d)
+        /usr/bin/find {{ atop_log_path }} -maxdepth 1 -type f -name 'atop_*' ! -name '*.gz' ! -name "atop_${TODAY}" -exec /usr/bin/gzip -9 -f {} + 2>/dev/null || true
+        /usr/bin/find {{ atop_log_path }} -maxdepth 1 -type f \( -name 'atop_*' -o -name 'atop_*.gz' \) ! -name "atop_${TODAY}" -mtime +{{ atop_log_generations }} -delete 2>/dev/null || true
     endscript
 }
