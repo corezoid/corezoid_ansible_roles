@@ -1,0 +1,66 @@
+#jinja2: trim_blocks:True, lstrip_blocks:True
+{{ ansible_managed | comment }}
+# Reverse-proxy vhost for "{{ site.name }}" — rendered from rp_sites.
+{% from "_macros.j2" import render_location with context %}
+{#
+  Per-site schema (all keys optional unless noted):
+    name              (required) used as the conf filename
+    server_name       (required) one or more hostnames, space-separated
+    listen            HTTP port (default 80)
+    ssl:
+      enabled         true -> TLS server on `ssl_listen`
+      listen          TLS port (default 443)
+      certificate     path to fullchain cert
+      certificate_key path to private key
+      http2           true (default) -> enable HTTP/2
+    redirect_http     true -> plain :80 server that 301s to https
+    security_headers  true (default when ssl) -> include security snippet
+    access_log        override access log path/format (e.g. "/var/log/nginx/<client>.access.log main")
+    error_log         override error log path (default /var/log/nginx/<name>.error.log)
+    client_max_body_size  per-site body limit
+    extra_server      raw lines injected into the main server{} block
+    locations         list of location dicts (see _macros.j2)
+#}
+{% set ssl = site.ssl | default({}) %}
+{% set is_ssl = ssl.enabled | default(false) %}
+
+{% if site.redirect_http | default(is_ssl) and is_ssl %}
+# Redirect plain HTTP to HTTPS
+server {
+    listen {{ site.listen | default(80) }};
+    server_name {{ site.server_name }};
+    return 301 https://$host$request_uri;
+}
+{% endif %}
+
+server {
+{% if is_ssl %}
+    listen {{ ssl.listen | default(443) }} ssl;
+{% if ssl.http2 | default(true) %}
+    http2 on;
+{% endif %}
+    ssl_certificate     {{ ssl.certificate }};
+    ssl_certificate_key {{ ssl.certificate_key }};
+    include {{ rp_snippets_dir }}/ssl.conf;
+{% if site.security_headers | default(true) %}
+    include {{ rp_snippets_dir }}/security.conf;
+{% endif %}
+{% else %}
+    listen {{ site.listen | default(80) }};
+{% endif %}
+    server_name {{ site.server_name }};
+
+    access_log {{ site.access_log | default(rp_access_log ~ ' ' ~ rp_log_format_name) }};
+    error_log  {{ site.error_log | default('/var/log/nginx/' ~ site.name ~ '.error.log') }};
+
+{% if site.client_max_body_size is defined %}
+    client_max_body_size {{ site.client_max_body_size }};
+{% endif %}
+{% if site.extra_server is defined %}
+{{ site.extra_server | indent(4, true) }}
+{% endif %}
+
+{% for loc in site.locations | default([]) %}
+{{ render_location(loc) }}
+{% endfor %}
+}

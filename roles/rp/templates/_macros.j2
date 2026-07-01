@@ -1,0 +1,141 @@
+{#
+  rp role — reusable Jinja2 macros for NGINX config.
+
+  Import in any template with:
+    {% from "_macros.j2" import render_location, proxy_block, add_headers with context %}
+
+  These macros let each client/environment describe custom locations as plain
+  data (lists of dicts) instead of hand-writing nginx blocks. See README.md for
+  the full location schema. Output is tuned for Ansible's templating defaults
+  (trim_blocks=True) plus lstrip_blocks=True (set via the #jinja2 header in the
+  consuming templates), which keeps the rendered indentation clean.
+#}
+
+{# ---- emit add_header directives from a list of {name,value[,always]} ---- #}
+{% macro add_headers(headers, ind=8) %}
+{% for h in headers %}
+{{ ' ' * ind }}add_header {{ h.name }} "{{ h.value }}"{{ ' always' if (h.always | default(true)) else '' }};
+{% endfor %}
+{% endmacro %}
+
+{# ---- the standard reverse-proxy directive set (incl. optional websocket) ---- #}
+{% macro proxy_block(loc) %}
+        proxy_pass {{ loc.proxy_pass }};
+        proxy_http_version 1.1;
+        proxy_set_header Host {{ loc.proxy_host | default('$host') }};
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto {{ loc.proxy_forwarded_proto | default('$scheme') }};
+{% if loc.forwarded_host is not defined or loc.forwarded_host %}
+        proxy_set_header X-Forwarded-Host {{ loc.forwarded_host | default('$host') }};
+{% endif %}
+{% if loc.websocket | default(false) %}
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+{% endif %}
+{% for h in loc.proxy_set_header | default([]) %}
+        proxy_set_header {{ h.name }} {{ h.value }};
+{% endfor %}
+{% if loc.proxy_ssl_name is defined %}
+        proxy_ssl_server_name on;
+        proxy_ssl_name {{ loc.proxy_ssl_name }};
+{% endif %}
+{% if loc.proxy_redirect is defined %}
+{% if loc.proxy_redirect is string %}
+        proxy_redirect {{ loc.proxy_redirect }};
+{% else %}
+{% for pr in loc.proxy_redirect %}
+        proxy_redirect {{ pr }};
+{% endfor %}
+{% endif %}
+{% endif %}
+{% for cd in loc.proxy_cookie_domain | default([]) %}
+        proxy_cookie_domain {{ cd }};
+{% endfor %}
+{% if loc.proxy_connection is defined %}
+        proxy_set_header Connection "{{ loc.proxy_connection }}";
+{% endif %}
+{% if loc.proxy_read_timeout is defined %}
+        proxy_read_timeout {{ loc.proxy_read_timeout }};
+{% endif %}
+{% if loc.proxy_connect_timeout is defined %}
+        proxy_connect_timeout {{ loc.proxy_connect_timeout }};
+{% endif %}
+{% if loc.proxy_send_timeout is defined %}
+        proxy_send_timeout {{ loc.proxy_send_timeout }};
+{% endif %}
+{% if loc.proxy_buffering is defined %}
+        proxy_buffering {{ loc.proxy_buffering }};
+{% endif %}
+{% endmacro %}
+
+{#
+  render_location — render one full `location` block from a dict.
+
+  Supported keys (all optional except `path`):
+    path                 location path (e.g. "/", "/api", "\.php$")
+    match                operator prefix: "", "=", "~", "~*", "^~"
+    default_type         response content-type for `return` bodies (e.g. text/html)
+    proxy_pass           upstream/URL to reverse-proxy to
+    proxy_host           value for the upstream Host header (default $host)
+    forwarded_host       X-Forwarded-Host value; set false to omit the header entirely
+    proxy_ssl_name       SNI/cert name for an HTTPS upstream (enables proxy_ssl_server_name)
+    proxy_redirect       e.g. "off", or "https://up.example/ /" to relativize
+    proxy_cookie_domain  list of "from to" rewrites for Set-Cookie domains
+    proxy_connection     value for the upstream Connection header (e.g. "" for keepalive)
+    websocket            true -> inject Upgrade/Connection headers
+    return               e.g. "301 https://$host$request_uri" or "444"
+    root / alias         static file serving
+    try_files            e.g. "$uri $uri/ /index.html"
+    index                index file(s)
+    client_max_body_size per-location body size override
+    limit_req            e.g. "zone=perip burst=20 nodelay"
+    limit_conn           e.g. "addr 10"
+    access_log           e.g. "off" or a path
+    add_headers          [{name,value[,always]}] response headers
+    proxy_*              passthrough proxy tuning (see proxy_block)
+    extra                raw lines injected verbatim (escape hatch)
+#}
+{% macro render_location(loc) %}
+    location {{ (loc.match ~ ' ') if loc.match | default('') | length else '' }}{{ loc.path }} {
+{% if loc.default_type is defined %}
+        default_type {{ loc.default_type }};
+{% endif %}
+{% if loc.client_max_body_size is defined %}
+        client_max_body_size {{ loc.client_max_body_size }};
+{% endif %}
+{% if loc.limit_req is defined %}
+        limit_req {{ loc.limit_req }};
+{% endif %}
+{% if loc.limit_conn is defined %}
+        limit_conn {{ loc.limit_conn }};
+{% endif %}
+{% if loc.access_log is defined %}
+        access_log {{ loc.access_log }};
+{% endif %}
+{% if loc.add_headers is defined %}
+{{ add_headers(loc.add_headers, 8) | trim('\n') }}
+{% endif %}
+{% if loc.return is defined %}
+        return {{ loc.return }};
+{% endif %}
+{% if loc.root is defined %}
+        root {{ loc.root }};
+{% endif %}
+{% if loc.alias is defined %}
+        alias {{ loc.alias }};
+{% endif %}
+{% if loc.index is defined %}
+        index {{ loc.index }};
+{% endif %}
+{% if loc.try_files is defined %}
+        try_files {{ loc.try_files }};
+{% endif %}
+{% if loc.proxy_pass is defined %}
+{{ proxy_block(loc) | trim('\n') }}
+{% endif %}
+{% if loc.extra is defined %}
+{{ loc.extra | trim('\n') | indent(8, true) }}
+{% endif %}
+    }
+{% endmacro %}

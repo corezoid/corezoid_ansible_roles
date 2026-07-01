@@ -1,0 +1,8 @@
+#jinja2: trim_blocks:True, lstrip_blocks:True
+{{ ansible_managed | comment }}
+# Reusable security-headers snippet — include inside a server{} block.
+{% from "_macros.j2" import add_headers with context %}
+{% if rp_hsts_header | length %}
+add_header Strict-Transport-Security "{{ rp_hsts_header }}" always;
+{% endif %}
+{{ add_headers(rp_security_headers, 0) | trim('\n') }}
