@@ -1,129 +1,15 @@
-- name: Set EL version
-  set_fact:
-    el_version: 7
-  when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-    - ansible_distribution_major_version == "7"
-  tags:
-    - pgsql-all
-    - pgsql-pgbouncer
-    - pgsql-pgbouncer-install
-
-- name: Set EL version
-  set_fact:
-    el_version: 8
-  when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-    - ansible_distribution_major_version == "8"
-  tags:
-    - pgsql-all
-    - pgsql-pgbouncer
-    - pgsql-pgbouncer-install
-
-- name: Set EL version
-  set_fact:
-    el_version: 7
-  when:
-    - ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "2"
-  tags:
-    - pgsql-all
-    - pgsql-pgbouncer
-    - pgsql-pgbouncer-install
-
-# Add PostgreSQL repository
-- name: Add PostgreSQL Repo
-  include: add_repo.yml
-  tags:
-     - pgsql-all
-     - pgsql-pgbouncer
-     - pgsql-pgbouncer-install
-
-# Install PgBouncer for non-Amazon distributions
-- name: Install PgBouncer packages
-  yum: name={{ item }} state=present update_cache=yes
-  with_items:
-    - pgbouncer
-  when: ansible_distribution != "Amazon"
-  tags:
-    - pgsql-all
-    - pgsql-pgbouncer
-    - pgsql-pgbouncer-install
-
-# Install PgBouncer for Amazon Linux 2
-- name: Copying packages for further installation PgBouncer on AMI2
-  copy:
-    src: "files/ius-release-el7.rpm"
-    dest: "/tmp/"
-  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
-
-# Install PgBouncer for Amazon Linux 2
-- name: Install PgBouncer packages for AMI2
-  block:
-    - name: remove python37
-      shell: yum remove python3* -y
-    - name: python36 installation
-      shell: sudo yum install /tmp/ius-release-el7.rpm -y
-    - name:  python36 installation
-      shell: yum install python36 -y
-#    - name: enable python3
-#      shell: amazon-linux-extras install python3 -y
-    - name: install pgbouncer
-#      yum: name={{ item }} state=present update_cache=yes disablerepo="Middleware-system"
-      yum: name={{ item }} state=present update_cache=yes disablerepo="*" enablerepo="epel*"
-      with_items:
-        - pgbouncer
-  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
-  tags:
-    - pgsql-all
-    - pgsql-pgbouncer
-    - pgsql-pgbouncer-install
-
-# Install PgBouncer for Amazon Linux 2023
-# Set Redis package facts based on system
-# Determines appropriate pgbouncer RPM package based on OS distribution, version and architecture
-- name: Set PGbouncer package facts
-  set_fact:
-    pgbouncer_rpm_file: >-
-      {{ {
-        'Amazon-2023-x86_64': 'pgbouncer-1.22.1-1.el9.x86_64.rpm',
-        'Amazon-2023-aarch64': 'pgbouncer-1.22.1-1.el9.aarch64.rpm'
-      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
-  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
-
-# Copy pgbouncer package to the target system
-# Transfers the appropriate pgbouncer RPM package with proper ownership and permissions
-- name: Copy pgbouncer Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
-  copy:
-    src: "files/{{ pgbouncer_rpm_file }}"
-    dest: "/tmp/{{ pgbouncer_rpm_file }}"
-    owner: root
-    group: root
-    mode: '0644'
-  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
-  tags:
-    - pgsql-all
-    - pgsql-pgbouncer
-    - pgsql-pgbouncer-install
-
-# Install pgbouncer using YUM package manager
-# Executes YUM to install pgbouncer package, continues on errors for resilience
-- name: Install pgbouncer Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
-  command: yum install /tmp/{{ pgbouncer_rpm_file }} -y
-  ignore_errors: true
-  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
-  tags:
-    - pgsql-all
-    - pgsql-pgbouncer
-    - pgsql-pgbouncer-install
-
-# Clean up the installation package
-# Removes temporary RPM file after installation is complete
-- name: Remove pgbouncer Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
-  file:
-    path: "/tmp/{{ pgbouncer_rpm_file }}"
-    state: absent
-  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+# Install pgbouncer per OS family:
+#   RedHat/Amazon -> pgbouncer_install_RedHat.yml (yum/rpm bodies, verbatim)
+#   Debian/Ubuntu -> pgbouncer_install_Debian.yml (apt, universe)
+- name: Install pgbouncer (per OS family)
+  ansible.builtin.include_tasks:
+    file: "pgbouncer_install_{{ ansible_os_family }}.yml"
+    # Dynamic includes don't propagate the include's tags — apply explicitly.
+    apply:
+      tags:
+        - pgsql-all
+        - pgsql-pgbouncer
+        - pgsql-pgbouncer-install
   tags:
     - pgsql-all
     - pgsql-pgbouncer
@@ -171,12 +57,13 @@
     - pgsql-pgbouncer
     - pgsql-pgbouncer-userlist
 
-# Configure PgBouncer
+# Configure PgBouncer — backend points at 127.0.0.1:{{ db_port }} (see template)
 - name: Add pgbouncer.ini
   template:
     src: templates/pgbouncer.ini.j2
     dest: /etc/pgbouncer/pgbouncer.ini
     mode: 0644
+  register: pgbouncer_ini
   tags:
     - pgsql-all
     - pgsql-pgbouncer
@@ -189,9 +76,13 @@
     owner: root
     group: root
     mode: 0755
-  when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux" or ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
+  when: >
+    (
+      (ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux" or ansible_distribution == "Amazon")
+      and
+      (ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023")
+    )
+    or ansible_os_family == "Debian"
   tags:
     - pgsql-all
     - pgsql-pgbouncer
@@ -206,9 +97,13 @@
     mode: 0755
   with_items:
     - "limits.conf"
-  when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux" or ansible_distribution == "Amazon"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023"
+  when: >
+    (
+      (ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux" or ansible_distribution == "Amazon")
+      and
+      (ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "2023")
+    )
+    or ansible_os_family == "Debian"
   register: pgbouncer_systemd_file
   tags:
     - pgsql-all
@@ -229,35 +124,16 @@
     - pgsql-pgbouncer-systemd
     - pgsql-pgbouncer-limits
 
-# - name: pgbouncer configuration, get hash for user - {{ db_app_user }}
-#   shell: psql -h {{ db_main_host }} -p {{ init_db_port }} -U {{ db_superuser_login }} postgres -Atc "select 'md5' || md5 ('{{ db_app_user_pass }}' || '{{ db_app_user }}')"
-#   register: db_app_user_hash
-#   tags:
-#     - pgsql-all
-#     - pgsql-pgbouncer
-#     - pgsql-pgbouncer-userlist
-
-# - name: pgbouncer configuration, get hash for user - {{ db_monitoring_user }}
-#   shell: psql -h {{ db_main_host }} -p {{ init_db_port }} -U {{ db_superuser_login }} postgres -Atc "select 'md5' || md5 ('{{ db_monitoring_user_password }}' || '{{ db_monitoring_user }}')"
-#   register: db_monitoring_user_hash
-#   tags:
-#     - pgsql-all
-#     - pgsql-pgbouncer
-#     - pgsql-pgbouncer-userlist
-
 # Configure PgBouncer
-- name: Add pgbouncer.ini
-  template:
-    src: templates/pgbouncer.ini.j2
-    dest: /etc/pgbouncer/pgbouncer.ini mode=0644
-
-# Configure PgBouncer
+# userlist owner is family-gated: the Debian pgbouncer package has NO 'pgbouncer'
+# user and runs as 'postgres'; RHEL keeps 'pgbouncer'.
 - name: Add userlist.txt
   template:
     src: templates/userlist.txt.j2
     dest: /etc/pgbouncer/userlist.txt
     mode: 0600
-    owner: pgbouncer
+    owner: "{{ 'postgres' if ansible_os_family == 'Debian' else 'pgbouncer' }}"
+  register: pgbouncer_userlist
   tags:
     - pgsql-all
     - pgsql-pgbouncer
@@ -273,5 +149,19 @@
     - pgsql-pgbouncer
     - pgsql-pgbouncer-start
 
-
-
+# The Debian pgbouncer package auto-starts on install with its DEFAULT config
+# (127.0.0.1:6432), so a plain `state: started` is a no-op and our pgbouncer.ini /
+# userlist.txt never take effect. Restart when any of them (or the systemd drop-in) changed
+# so the configured listen_addr/port (0.0.0.0:{{ pgbouncer.port }}) and userlist load.
+- name: Restart pgbouncer if config changed
+  service:
+    name: pgbouncer
+    state: restarted
+  when: >
+    (pgbouncer_ini is defined and pgbouncer_ini.changed)
+    or (pgbouncer_userlist is defined and pgbouncer_userlist.changed)
+    or (pgbouncer_systemd_file is defined and pgbouncer_systemd_file.changed)
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-start

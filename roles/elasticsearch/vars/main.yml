@@ -3,3 +3,8 @@
 elasticsearch_port: 8100
 elasticsearch_nginx_port: 9200
 elasticsearch_cluster_name: "worker-logs"
+
+# nginx.conf.j2 `user` directive: the RHEL nginx.org rpm creates a `nginx` OS user; the
+# Debian/Ubuntu distro nginx package (apt: name=nginx) runs as `www-data` instead — there is
+# no `nginx` user on Ubuntu, so nginx would fail to start with the RHEL value unchanged.
+es_nginx_user: "{{ 'www-data' if ansible_os_family == 'Debian' else 'nginx' }}"

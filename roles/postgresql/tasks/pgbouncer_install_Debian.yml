@@ -1,0 +1,11 @@
+---
+# Debian/Ubuntu: pgbouncer ships in 'universe' (enabled by the yum-role preflight).
+- name: Debian | install pgbouncer (universe)
+  ansible.builtin.apt:
+    name: pgbouncer
+    state: present
+    update_cache: yes
+  tags:
+    - pgsql-all
+    - pgsql-pgbouncer
+    - pgsql-pgbouncer-install

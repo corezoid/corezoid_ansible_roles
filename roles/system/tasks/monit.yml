@@ -1,62 +1,41 @@
-- name: Set Monit package facts
-  set_fact:
-    monit_rpm_file: >-
-      {{ {
-        'CentOS-7-x86_64': 'monit-5.25.1-1.el7.x86_64.rpm',
-        'CentOS-8-x86_64': 'monit-5.33.0-1.el8.x86_64.rpm',
-        'CentOS-9-x86_64': 'monit-5.33.0-1.el9.x86_64.rpm',
-        'RedHat-7-x86_64': 'monit-5.25.1-1.el7.x86_64.rpm',
-        'RedHat-8-x86_64': 'monit-5.33.0-1.el8.x86_64.rpm',
-        'RedHat-9-x86_64': 'monit-5.33.0-1.el9.x86_64.rpm',
-        'OracleLinux-7-x86_64': 'monit-5.25.1-1.el7.x86_64.rpm',
-        'OracleLinux-8-x86_64': 'monit-5.33.0-1.el8.x86_64.rpm',
-        'OracleLinux-9-x86_64': 'monit-5.33.0-1.el9.x86_64.rpm',
-        'Amazon-2023-x86_64': 'monit-5.33.0-1.el9.x86_64.rpm',
-        'Amazon-2023-aarch64': 'monit-5.33.0-1.el9.aarch64.rpm',
-        'Amazon-2-x86_64': 'monit-5.25.1-1.el7.x86_64.rpm'
-      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+---
+# Monit setup. Install + main config file diverge per OS family (bundled RPM +
+# /etc/monit.conf on RHEL, apt + /etc/monit/monitrc on Debian); the include dir,
+# state dir and service start are shared. See docs/plans/ubuntu-base-roles-plan.md.
 
-- name: Copy redis Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
-  copy:
-    src: "files/{{ monit_rpm_file }}"
-    dest: "/tmp/{{ monit_rpm_file }}"
-    owner: root
-    group: root
-    mode: '0644'
-  tags:
-    - redis-all
-    - redis-install
-
-# Install Redis using YUM package manager
-# Executes YUM to install  package, continues on errors for resilience
-- name: Install redis Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
-  command: yum install /tmp/{{ monit_rpm_file }} -y
-  ignore_errors: true
-  tags:
-    - redis-all
-    - redis-install
-
-# Clean up the installation package
-# Removes temporary RPM file after installation is complete
-- name: Remove redis Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
-  file:
-    path: "/tmp/{{ monit_rpm_file }}"
-    state: absent
-  tags:
-    - redis-all
-    - redis-install
-
-- name: Create monit.conf file
-  template:
-    src: templates/monit.conf.j2
-    dest: /etc/monit.conf
-    owner: root
-    group: root
-    mode: 0600
+- name: Install and configure monit (per OS family)
+  ansible.builtin.include_tasks:
+    file: "monit_{{ ansible_os_family }}.yml"
+    # Propagate tags to inner tasks (dynamic include). Without this a
+    # --tags system-monit run would skip the RHEL install/copy tasks (which
+    # carry only redis-* tags) and then fail starting a missing monit service.
+    apply:
+      tags:
+        - system-all
+        - system-monit
+        - system-monit-config
+        - system-monit-install
   tags:
     - system-all
     - system-monit
     - system-monit-config
+    - system-monit-install
+
+# Downstream service roles (redis, elasticsearch, capi, worker, ...) drop their
+# Monit fragments into /etc/monit.d, and the monit config includes /etc/monit.d/*.
+# The dir must exist on BOTH families or those roles break. Do NOT switch to
+# Debian's native /etc/monit/conf.d without migrating every producing role at once.
+- name: Create monit include directory
+  file:
+    path: /etc/monit.d
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  tags:
+    - system-all
+    - system-monit
+    - system-monit-dirs
 
 - name: Create monit directory
   file:

@@ -1,0 +1,386 @@
+---
+# Debian/Ubuntu PostgreSQL 15 install + relocated cluster (phase 1).
+# Mirrors the RedHat add_repo.yml + install.yml intent but Debian-native:
+#   PGDG apt repo -> apt install -> pg_dropcluster/pg_createcluster relocate+port
+#   -> listen/pg_hba/replication readiness -> enable+start postgresql@{{db_version}}-main.
+# Every destructive step is independently guarded and idempotent (re-runnable).
+# NO hardcoded IPs: pg_standby_cidr is supplied by the wrapper play / box var.
+
+# ---------------------------------------------------------------------------
+# Resolve parameters once (defaults live here, NOT env-specific IPs).
+# ---------------------------------------------------------------------------
+- name: "Debian | resolve disk/replication parameters"
+  ansible.builtin.set_fact:
+    pg_data_device: "{{ pg_data_device | default('/dev/sdb') }}"
+    pg_data_mount: "{{ pg_data_mount | default(top_db_dir) }}"
+    pg_data_fstype: "{{ pg_data_fstype | default('ext4') }}"
+    pg_data_force_reuse: "{{ pg_data_force_reuse | default(false) | bool }}"
+    pg_repl_user: "{{ pg_repl_user | default('replica') }}"
+    pg_repl_password: "{{ pg_repl_password | default(db_app_user_pass_enc) }}"
+
+- name: "Debian | derive device short name"
+  ansible.builtin.set_fact:
+    pg_data_device_name: "{{ pg_data_device | basename }}"
+    pg_default_datadir: "/var/lib/postgresql/{{ db_version }}/main"
+
+# ===========================================================================
+# (a) DATA-DISK PREP for {{ pg_data_device }} -> {{ pg_data_mount }}
+#     Blank-device gate BEFORE formatting; fail-closed on data reuse.
+# ===========================================================================
+- name: "Debian | disk | is {{ pg_data_mount }} already a mountpoint?"
+  ansible.builtin.command: "mountpoint -q {{ pg_data_mount }}"
+  register: pg_mount_check
+  changed_when: false
+  failed_when: false
+
+- name: "Debian | disk | probe {{ pg_data_device }} signatures (read-only, no wipe)"
+  ansible.builtin.command: "wipefs -n {{ pg_data_device }}"
+  register: pg_wipefs_probe
+  changed_when: false
+  failed_when: false
+
+- name: "Debian | disk | detect existing filesystem on {{ pg_data_device }}"
+  ansible.builtin.command: "blkid -o value -s TYPE {{ pg_data_device }}"
+  register: pg_dev_blkid
+  changed_when: false
+  failed_when: false
+
+- name: "Debian | disk | compute device readiness facts"
+  ansible.builtin.set_fact:
+    pg_dev_is_mounted: "{{ pg_mount_check.rc == 0 }}"
+    pg_dev_has_signatures: "{{ (pg_wipefs_probe.stdout | trim | length) > 0 }}"
+    pg_dev_has_partitions: "{{ (pg_data_device_name in ansible_devices) and ((ansible_devices[pg_data_device_name].partitions | default({})) | length > 0) }}"
+    pg_dev_fstype_existing: "{{ pg_dev_blkid.stdout | trim }}"
+
+# BLANK-DEVICE gate: only format a TRULY blank device. A device already mounted
+# at the target is a rerun (skip the gate). Otherwise, refuse unless force-reuse.
+- name: "Debian | disk | ABORT if {{ pg_data_device }} is not blank (and reuse not forced)"
+  ansible.builtin.assert:
+    that:
+      - not pg_dev_is_mounted
+      - not pg_dev_has_partitions
+      - not pg_dev_has_signatures
+    fail_msg: >-
+      {{ pg_data_device }} is NOT blank (mounted={{ pg_dev_is_mounted }},
+      partitions={{ pg_dev_has_partitions }}, signatures={{ pg_dev_has_signatures }},
+      existing_fs='{{ pg_dev_fstype_existing }}'). Refusing to format. Review the disk
+      manually and set pg_data_force_reuse=true only if you intend to reuse it.
+    quiet: true
+  when:
+    - not pg_dev_is_mounted
+    - not (pg_data_force_reuse | bool)
+
+# Create the filesystem ONLY on a blank device (never reformat an existing fs).
+- name: "Debian | disk | create {{ pg_data_fstype }} on {{ pg_data_device }}"
+  community.general.filesystem:
+    fstype: "{{ pg_data_fstype }}"
+    dev: "{{ pg_data_device }}"
+    force: false
+  when:
+    - not pg_dev_is_mounted
+    - pg_dev_fstype_existing | length == 0
+
+- name: "Debian | disk | ensure mount point {{ pg_data_mount }}"
+  ansible.builtin.file:
+    path: "{{ pg_data_mount }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: "Debian | disk | mount {{ pg_data_device }} at {{ pg_data_mount }} (fstab)"
+  ansible.posix.mount:
+    path: "{{ pg_data_mount }}"
+    src: "{{ pg_data_device }}"
+    fstype: "{{ pg_data_fstype }}"
+    opts: "defaults,noatime"
+    state: mounted
+
+# UNCONDITIONAL data-loss safety: whatever ended up mounted at {{ pg_data_mount }} — freshly
+# formatted by us, pre-mounted by the OS/image, or a reused/foreign volume — MUST be
+# empty-except-lost+found OR already the target PGDATA before a cluster is created here. This
+# runs on EVERY path (including "already mounted"), NOT gated behind force_reuse, so a wrong or
+# populated volume can never be initdb'd on top. A freshly-formatted blank disk has only
+# lost+found and passes; a rerun with the cluster present passes via the PGDATA branch.
+- name: "Debian | disk | list mounted contents (data-loss safety)"
+  ansible.builtin.find:
+    paths: "{{ pg_data_mount }}"
+    file_type: any
+    hidden: true
+    recurse: false
+  register: pg_mount_contents
+
+- name: "Debian | disk | stat target PGDATA marker (post-mount)"
+  ansible.builtin.stat:
+    path: "{{ db_dir }}/{{ db_version }}/data/PG_VERSION"
+  register: pg_target_pgversion_reuse
+
+- name: "Debian | disk | ABORT if {{ pg_data_mount }} holds foreign/non-empty data"
+  ansible.builtin.assert:
+    that:
+      - (pg_mount_contents.files | rejectattr('path', 'search', 'lost\\+found') | list | length == 0)
+        or (pg_target_pgversion_reuse.stat.exists | default(false))
+        or (pg_data_force_reuse | bool)
+    fail_msg: >-
+      {{ pg_data_mount }} (device {{ pg_data_device }}) is neither empty (except lost+found) nor an
+      existing PGDATA ({{ db_dir }}/{{ db_version }}/data). Refusing to initialize a cluster here to
+      avoid overwriting/contaminating data. Investigate the mounted volume; set
+      pg_data_force_reuse=true ONLY after confirming it is safe to reuse.
+    quiet: true
+
+# ===========================================================================
+# (b) PGDG apt repo
+# ===========================================================================
+- name: "Debian | repo | install PGDG prerequisites"
+  ansible.builtin.apt:
+    name:
+      - curl
+      - ca-certificates
+      - gnupg
+    state: present
+    update_cache: yes
+
+- name: "Debian | repo | ensure keyrings dir"
+  ansible.builtin.file:
+    path: /usr/share/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: "Debian | repo | install PGDG signing key (dearmored keyring)"
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg
+  args:
+    executable: /bin/bash
+    creates: /usr/share/keyrings/pgdg.gpg
+
+- name: "Debian | repo | add PGDG apt repository ({{ ansible_distribution_release }}-pgdg)"
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+    filename: pgdg
+    state: present
+    update_cache: yes
+
+# ===========================================================================
+# (c) apt install PostgreSQL 15
+# ===========================================================================
+- name: "Debian | install PostgreSQL {{ db_version }} packages"
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ db_version }}"
+      - "postgresql-client-{{ db_version }}"
+      - postgresql-contrib
+      - python3-psycopg2
+    state: present
+    update_cache: yes
+
+# ===========================================================================
+# (d) CLUSTER RELOCATION — fail-safe, ordered, independently guarded.
+# ===========================================================================
+# --- preflight (BEFORE any drop) -------------------------------------------
+- name: "Debian | cluster | preflight | ensure en_US.UTF-8 locale"
+  community.general.locale_gen:
+    name: en_US.UTF-8
+    state: present
+
+- name: "Debian | cluster | preflight | assert {{ pg_data_mount }} is mounted"
+  ansible.builtin.command: "mountpoint -q {{ pg_data_mount }}"
+  register: pg_mount_preflight
+  changed_when: false
+  failed_when: pg_mount_preflight.rc != 0
+
+- name: "Debian | cluster | preflight | assert {{ top_db_dir }} is writable"
+  ansible.builtin.file:
+    path: "{{ top_db_dir }}/.pg_write_test"
+    state: touch
+    mode: '0644'
+  register: pg_write_test
+
+- name: "Debian | cluster | preflight | remove write-test marker"
+  ansible.builtin.file:
+    path: "{{ top_db_dir }}/.pg_write_test"
+    state: absent
+
+# --- skip-if-target-exists -------------------------------------------------
+- name: "Debian | cluster | check target cluster already initialized"
+  ansible.builtin.stat:
+    path: "{{ db_dir }}/{{ db_version }}/data/PG_VERSION"
+  register: pg_target_data
+
+# --- data dirs (needed before pg_createcluster writes the datadir) ---------
+- name: "Debian | cluster | ensure top_db_dir {{ top_db_dir }}"
+  ansible.builtin.file:
+    path: "{{ top_db_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0775'
+  when: not pg_target_data.stat.exists
+
+- name: "Debian | cluster | ensure db_dir {{ db_dir }} (postgres-owned)"
+  ansible.builtin.file:
+    path: "{{ db_dir }}"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0700'
+  when: not pg_target_data.stat.exists
+
+# --- drop default cluster ONLY if it actually exists at the default path ---
+- name: "Debian | cluster | list existing clusters"
+  ansible.builtin.command: pg_lsclusters -h
+  register: pg_clusters
+  changed_when: false
+
+- name: "Debian | cluster | drop default {{ db_version }}/main (only if at default path)"
+  ansible.builtin.command: "pg_dropcluster --stop {{ db_version }} main"
+  when:
+    - not pg_target_data.stat.exists
+    - pg_clusters.stdout is search(pg_default_datadir | regex_escape)
+
+# --- create the relocated cluster ------------------------------------------
+- name: "Debian | cluster | create relocated cluster at {{ db_dir }}/{{ db_version }}/data"
+  ansible.builtin.command: >
+    pg_createcluster
+    --datadir={{ db_dir }}/{{ db_version }}/data
+    --port {{ db_port }}
+    --locale en_US.UTF-8
+    {{ db_version }} main
+  when: not pg_target_data.stat.exists
+
+# ===========================================================================
+# (e) CONFIG — drop-in only; NEVER overwrite Debian's generated postgresql.conf
+# ===========================================================================
+- name: "Debian | config | ensure conf.d dir"
+  ansible.builtin.file:
+    path: "/etc/postgresql/{{ db_version }}/main/conf.d"
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: '0755'
+
+- name: "Debian | config | corezoid drop-in (listen/port/password_encryption)"
+  ansible.builtin.copy:
+    dest: "/etc/postgresql/{{ db_version }}/main/conf.d/10-corezoid.conf"
+    owner: postgres
+    group: postgres
+    mode: '0644'
+    content: |
+      # Managed by Ansible (postgresql role, Debian path). Do not edit by hand.
+      # Debian keeps data_directory/hba_file/etc. in the generated postgresql.conf;
+      # this drop-in only layers the Corezoid-specific non-default settings.
+      listen_addresses = '*'
+      port = {{ db_port }}
+      password_encryption = md5
+  register: pg_conf_dropin
+
+# ===========================================================================
+# (f) pg_hba.conf (Debian path): KEEP Debian's generated, secure default HBA
+#     (local peer, host scram/md5) — do NOT render the legacy pg_hba-box.conf.j2, which ships
+#     `local all all trust` + `host all postgres 127.0.0.1/32 trust` (local superuser w/o password;
+#     a privilege-escalation surface on a prod host). We only ADD the replication line here.
+#     App/monitoring host entries (md5-scoped, NOT trust) are added in phase 2 with the app CIDRs —
+#     the peer default already lets the role's local `become_user: postgres` psql tasks work.
+# ===========================================================================
+- name: "Debian | hba | add replication entry for standby ({{ pg_standby_cidr }})"
+  ansible.builtin.lineinfile:
+    path: "/etc/postgresql/{{ db_version }}/main/pg_hba.conf"
+    line: "host    replication     {{ pg_repl_user }}     {{ pg_standby_cidr }}     md5"
+    regexp: '^host\s+replication\s+{{ pg_repl_user }}\s'
+    insertafter: EOF
+    state: present
+  register: pg_hba_repl
+
+# Debian's generated host rules use scram-sha-256, but we standardize on md5
+# (password_encryption=md5, md5 userlist). pgbouncer opens backend TCP connections to
+# 127.0.0.1:{{ db_port }}, so the loopback host rules MUST be md5 or backend auth is rejected
+# (pgbouncer up but unusable). Change the method in place on the default loopback lines
+# (regexp match → replace, preserving first-match position above broader rules).
+- name: "Debian | hba | loopback IPv4 → md5 (pgbouncer/app backend auth)"
+  ansible.builtin.lineinfile:
+    path: "/etc/postgresql/{{ db_version }}/main/pg_hba.conf"
+    regexp: '^host\s+all\s+all\s+127\.0\.0\.1/32\s+'
+    line: "host    all     all     127.0.0.1/32    md5"
+    state: present
+  register: pg_hba_lo4
+
+- name: "Debian | hba | loopback IPv6 → md5"
+  ansible.builtin.lineinfile:
+    path: "/etc/postgresql/{{ db_version }}/main/pg_hba.conf"
+    regexp: '^host\s+all\s+all\s+::1/128\s+'
+    line: "host    all     all     ::1/128    md5"
+    state: present
+  register: pg_hba_lo6
+
+# ===========================================================================
+# (i) enable + start postgresql@{{db_version}}-main (before role/asserts that query it)
+# ===========================================================================
+- name: "Debian | service | enable postgresql@{{ db_version }}-main"
+  ansible.builtin.systemd:
+    name: "postgresql@{{ db_version }}-main"
+    enabled: yes
+
+- name: "Debian | service | start postgresql@{{ db_version }}-main"
+  ansible.builtin.systemd:
+    name: "postgresql@{{ db_version }}-main"
+    state: started
+
+- name: "Debian | service | restart if base config drop-in changed"
+  ansible.builtin.systemd:
+    name: "postgresql@{{ db_version }}-main"
+    state: restarted
+  when: pg_conf_dropin.changed
+
+- name: "Debian | service | reload if only pg_hba changed"
+  ansible.builtin.systemd:
+    name: "postgresql@{{ db_version }}-main"
+    state: reloaded
+  when:
+    - (pg_hba_repl.changed or pg_hba_lo4.changed or pg_hba_lo6.changed)
+    - not pg_conf_dropin.changed
+
+# ===========================================================================
+# (g) replication role (dedicated LOGIN,REPLICATION) — needs the cluster up
+# ===========================================================================
+- name: "Debian | repl | create dedicated replication role '{{ pg_repl_user }}'"
+  become: true
+  become_user: postgres
+  postgresql_user:
+    name: "{{ pg_repl_user }}"
+    password: "{{ pg_repl_password }}"
+    role_attr_flags: "LOGIN,REPLICATION"
+    encrypted: true
+    port: "{{ db_port }}"
+    db: postgres
+
+# ===========================================================================
+# (h) ASSERT PG15 WAL/replication defaults (verify, do NOT set)
+# ===========================================================================
+- name: "Debian | repl | read wal_level/max_wal_senders/hot_standby"
+  become: true
+  become_user: postgres
+  ansible.builtin.command: >
+    psql -p {{ db_port }} -U postgres -Atc
+    "SELECT current_setting('wal_level'), current_setting('max_wal_senders'), current_setting('hot_standby')"
+  register: pg_wal_settings
+  changed_when: false
+
+- name: "Debian | repl | parse WAL settings"
+  ansible.builtin.set_fact:
+    pg_wal_level: "{{ pg_wal_settings.stdout.split('|')[0] }}"
+    pg_max_wal_senders: "{{ pg_wal_settings.stdout.split('|')[1] }}"
+    pg_hot_standby: "{{ pg_wal_settings.stdout.split('|')[2] }}"
+
+- name: "Debian | repl | assert PG15 replication readiness"
+  ansible.builtin.assert:
+    that:
+      - pg_wal_level in ['replica', 'logical']
+      - (pg_max_wal_senders | int) >= 10
+      - pg_hot_standby == 'on'
+    fail_msg: >-
+      Cluster is not replication-ready: wal_level={{ pg_wal_level }},
+      max_wal_senders={{ pg_max_wal_senders }}, hot_standby={{ pg_hot_standby }}.
+    quiet: true

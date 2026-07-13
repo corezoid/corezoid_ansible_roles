@@ -1,4 +1,14 @@
 ---
+- name: Assert supported OS family
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family in ['RedHat', 'Debian']
+    fail_msg: "yum role supports only RedHat/Debian families, got '{{ ansible_os_family }}'"
+    quiet: true
+  tags:
+    - yum-all
+    - yum-assert
+
 - debug:
     msg: |
       System Information:
@@ -7,7 +17,7 @@
       IP: {{ ansible_default_ipv4.address }}
       CPU count: {{ ansible_processor_vcpus }}
       Total memory: {{ ansible_memtotal_mb }} MB
-      
+
       Distribution Information:
       =======================
       Distribution: {{ ansible_distribution }}
@@ -34,6 +44,22 @@
    - yum-all
    - yum-epel-repo-install
 
+# EPEL on CentOS/Rocky/Alma EL8/EL9 — provides atop, iftop, iotop (not in base/appstream).
+# epel-release ships in the distro 'extras' repo, so a plain package install is enough.
+# OracleLinux uses oracle-epel-release-elN (handled in the system role); RHEL proper needs
+# the fedoraproject rpm + CRB and is intentionally out of scope here.
+- name: Enable EPEL on RHEL-family EL8/EL9 (CentOS/Rocky/Alma)
+  ansible.builtin.dnf:
+    name: epel-release
+    state: present
+    update_cache: yes
+  when:
+    - ansible_distribution in ['CentOS', 'Rocky', 'AlmaLinux']
+    - ansible_distribution_major_version in ['8', '9']
+  tags:
+    - yum-all
+    - yum-epel-repo-install
+
 - name: Add Corezoid Repo
   template:
     src: "templates/corezoid-Amazon-aws.repo.j2"
@@ -41,9 +67,27 @@
     owner: root
     group: root
     mode: '0644'
+  when: ansible_os_family == "RedHat"
   tags:
     - yum-all
     - yum-corezoid-repo
 
-
-
+# Debian/Ubuntu: the Corezoid bucket is RPM-only (redhat/<major>), there is no .deb repo.
+# On this family the role degrades to an apt-cache/universe preflight. It runs FIRST
+# (yum precedes system/atop in base_cz_all.yml) so downstream apt installs succeed.
+- name: Debian family repo/cache preflight
+  ansible.builtin.include_tasks:
+    file: repos_Debian.yml
+    # Dynamic includes do NOT propagate the include's tags to inner tasks — apply
+    # them explicitly so a tagged run (e.g. --tags yum-debian-preflight) executes
+    # the whole preflight, not a partial subset.
+    apply:
+      tags:
+        - yum-all
+        - yum-corezoid-repo
+        - yum-debian-preflight
+  when: ansible_os_family == "Debian"
+  tags:
+    - yum-all
+    - yum-corezoid-repo
+    - yum-debian-preflight

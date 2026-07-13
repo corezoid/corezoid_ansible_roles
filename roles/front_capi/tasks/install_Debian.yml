@@ -1,0 +1,220 @@
+# Debian/Ubuntu install path (Ubuntu 22.04 "jammy"): nginx.org apt repo (creates the `nginx`
+# OS user and the same /etc/nginx/conf.d layout as the RHEL nginx.org build, so the rest of
+# this role's tasks/templates need zero user/path changes) + the Corezoid static payloads.
+#
+# corezoid-web-admin / conf-agent-client are RPM-only (no .deb — see
+# front_capi-debian-port-plan.md §4). They are pure static HTML/JS/CSS with no runtime, so
+# unlike the app-tier services they CAN be delivered to Ubuntu by unpacking the RPM's file
+# payload directly onto disk (rpm2cpio), without running anything RHEL. This is a documented
+# STOPGAP per the plan — the preferred long-term fix is for the release pipeline to publish
+# a tarball alongside the RPM in the bucket. Filenames are parameterized (never hardcode the
+# bucket layout); this env's box.yml must set front_capi_web_admin_rpm_filename and
+# front_capi_conf_agent_client_rpm_filename to the exact RPM filenames for {{ corezoid_release }}.
+
+- name: "Debian | install apt prerequisites"
+  ansible.builtin.apt:
+    name:
+      - curl
+      - gnupg
+      - ca-certificates
+      - lsb-release
+    state: present
+    update_cache: true
+
+- name: "Debian | ensure keyrings dir"
+  ansible.builtin.file:
+    path: /usr/share/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: "Debian | install nginx.org signing key (dearmored keyring)"
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    curl -fsSL https://nginx.org/keys/nginx_signing.key
+    | gpg --dearmor -o /usr/share/keyrings/nginx-archive-keyring.gpg
+  args:
+    executable: /bin/bash
+    creates: /usr/share/keyrings/nginx-archive-keyring.gpg
+
+- name: "Debian | add nginx.org apt repository ({{ ansible_distribution_release }})"
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu {{ ansible_distribution_release }} nginx"
+    filename: nginx
+    state: present
+    update_cache: true
+
+- name: "Debian | install nginx"
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+
+- name: "Debian | install rpm2cpio/cpio (to unpack the RPM-only Corezoid static payloads)"
+  ansible.builtin.apt:
+    name:
+      - rpm2cpio
+      - cpio
+    state: present
+
+# --- corezoid-web-admin payload (serves {{ top_dir }}/www/admin + /capi-js) ---
+# Idempotence guard is VERSION-AWARE, not just presence-based: a marker file records which
+# RPM filename was actually extracted, so bumping front_capi_web_admin_rpm_filename to a
+# newer release re-triggers the fetch/extract instead of silently keeping stale assets
+# forever just because {{ top_dir }}/www/admin/index.html already exists from an old install.
+- name: "Debian | stat corezoid-web-admin install marker"
+  ansible.builtin.stat:
+    path: "{{ top_dir }}/www/admin/.front_capi_installed_rpm"
+  register: front_capi_web_admin_marker_stat
+
+- name: "Debian | read corezoid-web-admin install marker"
+  ansible.builtin.slurp:
+    src: "{{ top_dir }}/www/admin/.front_capi_installed_rpm"
+  register: front_capi_web_admin_marker
+  when: front_capi_web_admin_marker_stat.stat.exists
+
+- name: "Debian | determine whether corezoid-web-admin payload is already at the pinned version"
+  ansible.builtin.set_fact:
+    front_capi_web_admin_present: >-
+      {{ front_capi_web_admin_marker_stat.stat.exists and
+         (front_capi_web_admin_marker.content | b64decode | trim) == front_capi_web_admin_rpm_filename }}
+
+- name: "Debian | fetch corezoid-web-admin RPM ({{ corezoid_release }})"
+  ansible.builtin.get_url:
+    url: "https://{{ corezoid_repo_domain | default('repo.middleware.biz') }}/corezoid/{{ corezoid_release }}/redhat/9/{{ front_capi_web_admin_rpm_filename }}"
+    dest: "/tmp/{{ front_capi_web_admin_rpm_filename }}"
+    mode: '0644'
+  when: not front_capi_web_admin_present
+
+# Remove the OLD index.html before extracting: on an upgrade (version marker mismatch) the
+# previous RPM's index.html is still sitting at this exact path, so without removing it first
+# the verify-after-extract step below could pass by seeing stale content even if the newly
+# pinned RPM is wrong or lays its payload out differently — this makes verification a true
+# test of what THIS extraction produced, not a leftover from the prior install.
+- name: "Debian | remove stale corezoid-web-admin index.html before (re)extracting"
+  ansible.builtin.file:
+    path: "{{ top_dir }}/www/admin/index.html"
+    state: absent
+  when: not front_capi_web_admin_present
+
+# Extracts the rpm's file payload directly onto the filesystem (chdir /) — this reproduces
+# what `rpm -i` would place on disk for a pure-data package with no scriptlets, without
+# needing rpm/yum on Ubuntu. Static assets only; no service to (re)start as a result.
+- name: "Debian | unpack corezoid-web-admin payload onto the filesystem"
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    rpm2cpio /tmp/{{ front_capi_web_admin_rpm_filename }} | cpio -idm
+  args:
+    chdir: /
+    executable: /bin/bash
+  when: not front_capi_web_admin_present
+
+- name: "Debian | remove downloaded corezoid-web-admin RPM"
+  ansible.builtin.file:
+    path: "/tmp/{{ front_capi_web_admin_rpm_filename }}"
+    state: absent
+  when: not front_capi_web_admin_present
+
+# rpm2cpio | cpio can exit 0 while writing content somewhere other than expected (wrong
+# pinned filename still being a valid RPM, unexpected payload layout, etc.) — re-check the
+# marker file the role actually serves so a bad extraction fails loudly here instead of
+# silently continuing to a broken frontend later.
+- name: "Debian | verify corezoid-web-admin payload landed at {{ top_dir }}/www/admin"
+  ansible.builtin.stat:
+    path: "{{ top_dir }}/www/admin/index.html"
+  register: front_capi_web_admin_verify
+  when: not front_capi_web_admin_present
+
+- name: "Debian | assert corezoid-web-admin payload is present"
+  ansible.builtin.assert:
+    that:
+      - front_capi_web_admin_verify.stat.exists
+    fail_msg: >-
+      {{ top_dir }}/www/admin/index.html is still missing after extracting
+      {{ front_capi_web_admin_rpm_filename }} — the RPM's payload did not land where
+      expected. Check front_capi_web_admin_rpm_filename against the actual RPM contents.
+    quiet: true
+  when: not front_capi_web_admin_present
+
+- name: "Debian | record installed corezoid-web-admin RPM in the version marker"
+  ansible.builtin.copy:
+    content: "{{ front_capi_web_admin_rpm_filename }}\n"
+    dest: "{{ top_dir }}/www/admin/.front_capi_installed_rpm"
+    owner: nginx
+    group: nginx
+    mode: '0644'
+  when: not front_capi_web_admin_present
+
+# --- conf-agent-client payload (serves {{ top_dir }}/www/conf-agent-client, superadmin SPA) ---
+- name: "Debian | stat conf-agent-client install marker"
+  ansible.builtin.stat:
+    path: "{{ top_dir }}/www/conf-agent-client/.front_capi_installed_rpm"
+  register: front_capi_conf_agent_client_marker_stat
+
+- name: "Debian | read conf-agent-client install marker"
+  ansible.builtin.slurp:
+    src: "{{ top_dir }}/www/conf-agent-client/.front_capi_installed_rpm"
+  register: front_capi_conf_agent_client_marker
+  when: front_capi_conf_agent_client_marker_stat.stat.exists
+
+- name: "Debian | determine whether conf-agent-client payload is already at the pinned version"
+  ansible.builtin.set_fact:
+    front_capi_conf_agent_client_present: >-
+      {{ front_capi_conf_agent_client_marker_stat.stat.exists and
+         (front_capi_conf_agent_client_marker.content | b64decode | trim) == front_capi_conf_agent_client_rpm_filename }}
+
+- name: "Debian | fetch conf-agent-client RPM ({{ corezoid_release }})"
+  ansible.builtin.get_url:
+    url: "https://{{ corezoid_repo_domain | default('repo.middleware.biz') }}/corezoid/{{ corezoid_release }}/redhat/9/{{ front_capi_conf_agent_client_rpm_filename }}"
+    dest: "/tmp/{{ front_capi_conf_agent_client_rpm_filename }}"
+    mode: '0644'
+  when: not front_capi_conf_agent_client_present
+
+# See the corezoid-web-admin section above: remove the OLD index.html first so the
+# verify-after-extract step can't pass on a stale leftover from the previous install.
+- name: "Debian | remove stale conf-agent-client index.html before (re)extracting"
+  ansible.builtin.file:
+    path: "{{ top_dir }}/www/conf-agent-client/index.html"
+    state: absent
+  when: not front_capi_conf_agent_client_present
+
+- name: "Debian | unpack conf-agent-client payload onto the filesystem"
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    rpm2cpio /tmp/{{ front_capi_conf_agent_client_rpm_filename }} | cpio -idm
+  args:
+    chdir: /
+    executable: /bin/bash
+  when: not front_capi_conf_agent_client_present
+
+- name: "Debian | remove downloaded conf-agent-client RPM"
+  ansible.builtin.file:
+    path: "/tmp/{{ front_capi_conf_agent_client_rpm_filename }}"
+    state: absent
+  when: not front_capi_conf_agent_client_present
+
+- name: "Debian | verify conf-agent-client payload landed at {{ top_dir }}/www/conf-agent-client"
+  ansible.builtin.stat:
+    path: "{{ top_dir }}/www/conf-agent-client/index.html"
+  register: front_capi_conf_agent_client_verify
+  when: not front_capi_conf_agent_client_present
+
+- name: "Debian | assert conf-agent-client payload is present"
+  ansible.builtin.assert:
+    that:
+      - front_capi_conf_agent_client_verify.stat.exists
+    fail_msg: >-
+      {{ top_dir }}/www/conf-agent-client/index.html is still missing after extracting
+      {{ front_capi_conf_agent_client_rpm_filename }} — the RPM's payload did not land where
+      expected. Check front_capi_conf_agent_client_rpm_filename against the actual RPM contents.
+    quiet: true
+  when: not front_capi_conf_agent_client_present
+
+- name: "Debian | record installed conf-agent-client RPM in the version marker"
+  ansible.builtin.copy:
+    content: "{{ front_capi_conf_agent_client_rpm_filename }}\n"
+    dest: "{{ top_dir }}/www/conf-agent-client/.front_capi_installed_rpm"
+    owner: nginx
+    group: nginx
+    mode: '0644'
+  when: not front_capi_conf_agent_client_present

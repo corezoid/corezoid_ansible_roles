@@ -1,0 +1,98 @@
+# Debian/Ubuntu install path (Ubuntu 22.04 "jammy"): Team RabbitMQ's current apt repos.
+#
+# NOTE: the old Cloudsmith-fronted ppa1/ppa2.rabbitmq.com repos referenced by earlier drafts
+# of this port were retired 2025-11-01 (see rabbitmq.com/blog/2025/07/16/debian-apt-repositories-are-moving)
+# and no longer resolve. This uses the current deb1/deb2.rabbitmq.com repos instead, signed with
+# Team RabbitMQ's standard key. Verified live (2026-07-09) against the deb1 Packages indices that
+# both pinned versions exist: erlang-base 1:26.0.2-1 and rabbitmq-server 3.12.2-1 for jammy/amd64.
+
+- name: "Debian | map ansible_architecture to dpkg arch"
+  ansible.builtin.set_fact:
+    rabbitmq_deb_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_architecture] | default(ansible_architecture) }}"
+
+# Team RabbitMQ's Erlang apt repo (rabbitmq_apt_erlang_repo_*) publishes amd64 packages
+# only — there is no arm64 Erlang build there (arm64 hosts need Launchpad instead, which
+# this role does not wire up). Fail loudly here rather than silently writing an arm64 repo
+# entry that would 404 at `apt-get install` time. All current cz_rabbit Debian targets
+# (ff_kyrgyztan_prod_hl) are x86_64; this only guards a not-yet-supported combination.
+- name: "Debian | assert amd64 (Team RabbitMQ Erlang apt repo has no arm64 build)"
+  ansible.builtin.assert:
+    that:
+      - rabbitmq_deb_arch == 'amd64'
+    fail_msg: >-
+      rabbitmq role's Debian/Ubuntu install path only supports amd64
+      (ansible_architecture={{ ansible_architecture }} -> {{ rabbitmq_deb_arch }}).
+      Team RabbitMQ's rabbitmq-erlang apt repo does not publish arm64 packages;
+      an arm64 Debian/Ubuntu host needs a different Erlang source (e.g. Launchpad),
+      which this role does not implement.
+    quiet: true
+
+- name: "Debian | install apt prerequisites"
+  ansible.builtin.apt:
+    name:
+      - curl
+      - gnupg
+      - apt-transport-https
+      - ca-certificates
+    state: present
+    update_cache: true
+
+- name: "Debian | ensure keyrings dir"
+  ansible.builtin.file:
+    path: /usr/share/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: "Debian | install Team RabbitMQ signing key (dearmored keyring)"
+  ansible.builtin.shell: >
+    set -o pipefail &&
+    curl -1sLf "{{ rabbitmq_apt_key_url }}"
+    | gpg --dearmor -o /usr/share/keyrings/com.rabbitmq.team.gpg
+  args:
+    executable: /bin/bash
+    creates: /usr/share/keyrings/com.rabbitmq.team.gpg
+
+- name: "Debian | add RabbitMQ erlang + server apt sources ({{ ansible_distribution_release }})"
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/rabbitmq.list
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      deb [arch={{ rabbitmq_deb_arch }} signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] {{ rabbitmq_apt_erlang_repo_1 }}/ubuntu/{{ ansible_distribution_release }} {{ ansible_distribution_release }} main
+      deb [arch={{ rabbitmq_deb_arch }} signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] {{ rabbitmq_apt_erlang_repo_2 }}/ubuntu/{{ ansible_distribution_release }} {{ ansible_distribution_release }} main
+      deb [arch={{ rabbitmq_deb_arch }} signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] {{ rabbitmq_apt_server_repo_1 }}/ubuntu/{{ ansible_distribution_release }} {{ ansible_distribution_release }} main
+      deb [arch={{ rabbitmq_deb_arch }} signed-by=/usr/share/keyrings/com.rabbitmq.team.gpg] {{ rabbitmq_apt_server_repo_2 }}/ubuntu/{{ ansible_distribution_release }} {{ ansible_distribution_release }} main
+  register: rabbitmq_apt_sources
+
+- name: "Debian | apt update after adding RabbitMQ repos"
+  ansible.builtin.apt:
+    update_cache: true
+  when: rabbitmq_apt_sources.changed
+
+- name: "Debian | build pinned Erlang package=version list"
+  ansible.builtin.set_fact:
+    rabbitmq_erlang_packages_pinned: >-
+      {{ rabbitmq_erlang_packages_debian
+         | map('regex_replace', '(.+)', '\1=1:' ~ rmq_erl_version ~ '-' ~ rabbitmq_deb_erlang_revision)
+         | list }}
+
+- name: "Debian | install Erlang {{ rmq_erl_version }} (pinned minimal subset)"
+  ansible.builtin.apt:
+    name: "{{ rabbitmq_erlang_packages_pinned }}"
+    state: present
+  # Fail loudly on a real apt error (unlike the RHEL yum path, which tolerates rpm-ordering
+  # errors with ignore_errors — apt resolves dependencies properly, so a failure here is real).
+
+- name: "Debian | install rabbitmq-server {{ rmq_version }} (pinned, socat pulled as a dependency)"
+  ansible.builtin.apt:
+    name: "rabbitmq-server={{ rmq_version }}-{{ rabbitmq_deb_server_revision }}"
+    state: present
+
+- name: "Debian | hold Erlang + rabbitmq-server at the pinned versions (block unattended-upgrades drift)"
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: "{{ rabbitmq_erlang_packages_debian + ['rabbitmq-server'] }}"

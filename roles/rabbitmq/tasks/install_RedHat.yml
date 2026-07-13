@@ -1,0 +1,115 @@
+# RHEL/CentOS/OracleLinux/Amazon install path — moved VERBATIM from tasks/main.yml
+# (bundled-rpm install via yum). Byte-for-byte with the pre-port role; do not edit
+# without also verifying the 35+ RHEL environments that consume this role unchanged.
+
+# Set Rabbit package facts based on system
+# Determines appropriate Rabbit RPM package based on OS distribution, version and architecture
+- name: Set RabbitMQ package facts
+  set_fact:
+    rabbit_rpm_file: >-
+      {{ {
+        'CentOS-7-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'CentOS-8-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'CentOS-9-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'RedHat-7-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'RedHat-8-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'RedHat-9-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'OracleLinux-7-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'OracleLinux-8-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'OracleLinux-9-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'Amazon-2023-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'Amazon-2023-aarch64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'Amazon-2-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm'
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+  when: rmq_version == "3.12.2" and rmq_erl_version == "26.0.2"
+
+# Set Erlang package facts based on system
+# Determines appropriate Erlang RPM package based on OS distribution, version and architecture
+- name: Set Erlang package facts
+  set_fact:
+    erlang_rpm_file: >-
+      {{ {
+        'CentOS-7-x86_64': 'erlang-26.0.2-1.el7.x86_64.rpm',
+        'CentOS-8-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'CentOS-9-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'RedHat-7-x86_64': 'erlang-26.0.2-1.el7.x86_64.rpm',
+        'RedHat-8-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'RedHat-9-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'OracleLinux-7-x86_64': 'erlang-26.0.2-1.el7.x86_64.rpm',
+        'OracleLinux-8-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'OracleLinux-9-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'Amazon-2023-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'Amazon-2023-aarch64': 'erlang-26.0.2-1.amzn2023.aarch64.rpm',
+        'Amazon-2-x86_64': 'erlang-26.0.2-1.el7.x86_64.rpm'
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+  when: rmq_version == "3.12.2" and rmq_erl_version == "26.0.2"
+
+# Set Socat package facts based on system
+# Determines appropriate Socat RPM package based on OS distribution, version and architecture
+- name: Set Socat package facts
+  set_fact:
+    socat_rpm_file: >-
+      {{ {
+        'CentOS-7-x86_64': 'socat-1.7.3.2-2.el7.x86_64.rpm',
+        'CentOS-8-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'CentOS-9-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'RedHat-7-x86_64': 'socat-1.7.3.2-2.el7.x86_64.rpm',
+        'RedHat-8-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'RedHat-9-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'OracleLinux-7-x86_64': 'socat-1.7.3.2-2.el7.x86_64.rpm',
+        'OracleLinux-8-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'OracleLinux-9-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'Amazon-2023-x86_64': 'socat-1.7.4.2-1.amzn2023.0.2.x86_64.rpm',
+        'Amazon-2023-aarch64': 'socat-1.7.4.2-1.amzn2023.0.2.aarch64.rpm',
+        'Amazon-2-x86_64': 'socat-1.7.3.2-2.el7.x86_64.rpm'
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+  when: rmq_version == "3.12.2" and rmq_erl_version == "26.0.2"
+
+# Debug selected RPM files
+- name: Debug selected RPM files
+  debug:
+    msg:
+      - "Selected RabbitMQ RPM: {{ rabbit_rpm_file }}"
+      - "Selected Erlang RPM: {{ erlang_rpm_file }}"
+      - "Selected Socat RPM: {{ socat_rpm_file }}"
+
+# Copy packages
+- name: Copy RabbitMQ packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  copy:
+    src: "files/{{ item }}"
+    dest: "/tmp/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  with_items:
+    - "{{ rabbit_rpm_file }}"
+    - "{{ erlang_rpm_file }}"
+    - "{{ socat_rpm_file }}"
+  tags:
+    - rabbit-all
+    - rabbit-install
+
+# Install packages
+- name: Install RabbitMQ packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  command: yum install /tmp/{{ item }} -y
+  with_items:
+    - "{{ socat_rpm_file }}"
+    - "{{ erlang_rpm_file }}"
+    - "{{ rabbit_rpm_file }}"
+  ignore_errors: true
+  tags:
+    - rabbit-all
+    - rabbit-install
+
+# Clean up installation packages
+- name: Remove RabbitMQ packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  file:
+    path: "/tmp/{{ item }}"
+    state: absent
+  with_items:
+    - "{{ rabbit_rpm_file }}"
+    - "{{ erlang_rpm_file }}"
+    - "{{ socat_rpm_file }}"
+  tags:
+    - rabbit-all
+    - rabbit-install

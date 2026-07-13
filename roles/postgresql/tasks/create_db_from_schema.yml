@@ -60,6 +60,11 @@
 - name: deploy db schema for {{ local_db }}
   become: yes
   become_user: postgres
+  # NOTE: the corezoid *.sql schema assets are authored for LENIENT loading — e.g. conveyor.sql does
+  # `CREATE SCHEMA public` (line 17) which errors "already exists" on a fresh PG15 DB. This is benign
+  # and every RHEL env has loaded it this way for years (no ON_ERROR_STOP → error ignored, rest loads).
+  # ON_ERROR_STOP/--single-transaction would abort the whole file on that benign error, so we keep the
+  # original lenient load (byte-for-byte with RHEL). Idempotence via the "no user tables" gate above.
   shell: psql -p {{ db_main.port }} -U postgres {{ local_db }} -f {{ db_schema }}
   when:
     - check_db_tables.stdout == "0"
@@ -72,6 +77,8 @@
 
 # Sets up appropriate access permissions for different user roles
 - name: grant privileges on all tables in {{ local_db }}
+  become: true
+  become_user: "{{ 'postgres' if ansible_os_family == 'Debian' else 'root' }}"
   postgresql_privs: >
     db={{ local_db }}
     privs={{ item.privs }}

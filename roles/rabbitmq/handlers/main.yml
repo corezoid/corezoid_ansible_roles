@@ -1,2 +1,5 @@
 ---
 # handlers file for rabbitmq
+# (intentionally empty — the Debian stale-cookie-after-fresh-install fix uses a plain tagged task
+# in tasks/main.yml, not a handler, so it stays visible under selective --tags runs and doesn't need
+# a play-global flush_handlers; see the "restart rabbitmq-server" task there.)

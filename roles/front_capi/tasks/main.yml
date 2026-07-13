@@ -1,43 +1,42 @@
 ---
-# Clean YUM cache to ensure fresh package metadata
-# Removes all cached package data to prevent installation issues
-- name: Yum clean all
-  command: yum clean all
-  tags:
-    - front-capi-app
-    - front-capi-all
-    - front-capi-nginx-setup
-    - front-capi-nginx-package
+# Family split: package acquisition (nginx + the RPM-only Corezoid static payloads) is the
+# only RHEL/Debian divergence in this role (everything below "Create directory structure" is
+# portable). RHEL body moved verbatim to install_RedHat.yml; Debian/Ubuntu uses the nginx.org
+# apt repo + an rpm2cpio stopgap for corezoid-web-admin/conf-agent-client (install_Debian.yml).
+- name: Assert supported OS family
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family in ['RedHat', 'Debian']
+    fail_msg: "front_capi role supports only RedHat/Debian, got '{{ ansible_os_family }}'"
+    quiet: true
+  tags: [front-capi-all]
 
-# Install Nginx web server
-# Sets up the Nginx package from default repositories
-- name: Install nGinx package
-  yum:
-    name: "{{ item }}"
-    state: present
-    update_cache: yes
-  with_items:
-    - nginx
-  tags:
-    - front-capi-all
-    - front-capi-nginx-setup
-    - front-capi-nginx-package
+# Tags on a dynamic `include_tasks` gate whether Ansible walks into the file at all — unlike
+# `import_tasks`, they are NOT reliably inherited by tasks inside it (confirmed empirically),
+# so the include must ALSO carry `apply.tags`, or a targeted `--tags front-capi-app` run
+# (an existing tag on the RHEL "Yum clean all" task, preserved verbatim in install_RedHat.yml)
+# would silently skip the whole include. IMPORTANT: `apply.tags` is unioned onto EVERY task in
+# the included file (confirmed empirically) — it must therefore hold only the tags common to
+# every task (front-capi-all/-nginx-setup/-nginx-package), NOT the narrower front-capi-app tag,
+# or the nginx/web-admin/conf-agent-client install tasks would incorrectly start matching a
+# `--tags front-capi-app` run too. The narrow tag stays only on the include's own `tags:` (so
+# the walk-in happens) and on "Yum clean all"'s own literal tag (unchanged, preserved verbatim)
+# so only that one task actually matches the narrow filter.
+- name: Install nginx + Corezoid static payloads (RedHat/Amazon)
+  include_tasks:
+    file: install_RedHat.yml
+    apply:
+      tags: [front-capi-all, front-capi-nginx-setup, front-capi-nginx-package]
+  when: ansible_os_family == 'RedHat'
+  tags: [front-capi-all, front-capi-app, front-capi-nginx-setup, front-capi-nginx-package]
 
-# Install required packages Install Corezoid Web Admin and Superadmin static content
-- name: Install required packages
-  yum:
-    name: "{{ item.name }}"
-    state: present
-    update_cache: yes
-    disablerepo: "*"
-    enablerepo: "aws-corezoid"
-  loop:
-    - { name: "corezoid-web-admin-{{ corezoid_release_app_version.corezoid_web_admin }}", disablerepo: "*", enablerepo: "aws-corezoid" }
-    - { name: "conf-agent-client", disablerepo: "*", enablerepo: "aws-corezoid" }
-  tags:
-    - front-capi-all
-    - front-capi-nginx-setup
-    - front-capi-nginx-package
+- name: Install nginx + Corezoid static payloads (Debian/Ubuntu)
+  include_tasks:
+    file: install_Debian.yml
+    apply:
+      tags: [front-capi-all, front-capi-nginx-setup, front-capi-nginx-package]
+  when: ansible_os_family == 'Debian'
+  tags: [front-capi-all, front-capi-app, front-capi-nginx-setup, front-capi-nginx-package]
 
 # Create directory structure
 - name: Create directory structure
@@ -102,8 +101,24 @@
     - { src: "{{ corezoid_release }}-superadmin.conf.j2", dest: "/etc/nginx/conf.d/superadmin.conf" }
     - { src: "upstream.conf.j2", dest: "/etc/nginx/conf.d/corezoid-upstream.conf" }
     - { src: "status.conf.j2", dest: "/etc/nginx/conf.d/corezoid-status.conf" }
-    - { src: "cert-corezoid.j2", dest: "{{ nginx_ssl_dir }}/cert-corezoid", mode: "0600" }
     - { src: "nginx.conf.j2", dest: "/etc/nginx/nginx.conf", mode: "0600" }
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
+    - front-capi-nginx-configs
+    - front-capi-nginx-mainconfig
+
+# Behind a TLS-terminating HAProxy (front_behind_lb: true) the front serves plain :80 and
+# never uses its own cert — HAProxy owns TLS (see CLAUDE.md "Front nginx behind HAProxy").
+# front_behind_lb defaults false so RHEL/existing envs render this exactly as before.
+- name: Create Nginx SSL cert-corezoid include
+  template:
+    src: "templates/cert-corezoid.j2"
+    dest: "{{ nginx_ssl_dir }}/cert-corezoid"
+    owner: root
+    group: root
+    mode: "0600"
+  when: not (front_behind_lb | default(false))
   tags:
     - front-capi-all
     - front-capi-nginx-setup
@@ -119,6 +134,7 @@
     owner: "root"
     group: "root"
     mode: "0600"
+  when: not (front_behind_lb | default(false))
   tags:
     - front-capi-all
     - front-capi-nginx-setup
@@ -132,8 +148,9 @@
     state: "{{ item.state | default('link') }}"
   loop:
     - { src: "/ebsmnt/www/conf-agent-client", dest: "/ebsmnt/www/conf-agent-client/superadmin" }
-    - { src: "{{ nginx_ssl_filename }}", dest: "{{ nginx_ssl_dir }}/corezoid.crt" }
-    - { src: "{{ nginx_ssl_filename }}", dest: "{{ nginx_ssl_dir }}/corezoid.key" }
+    - { src: "{{ nginx_ssl_filename }}", dest: "{{ nginx_ssl_dir }}/corezoid.crt", behind_lb_skip: true }
+    - { src: "{{ nginx_ssl_filename }}", dest: "{{ nginx_ssl_dir }}/corezoid.key", behind_lb_skip: true }
+  when: not (item.behind_lb_skip | default(false) and (front_behind_lb | default(false)))
   tags:
     - front-capi-app
     - front-capi-all
@@ -141,6 +158,18 @@
     - front-capi-nginx-configs
     - front-capi-nginx-symlink
     - front-capi-nginx-setup-ssl
+
+# Validate AFTER the cert files exist: on a direct-TLS host (front_behind_lb: false,
+# the default) the 01-corezoid.com.conf/superadmin.conf configs `include ssl/cert-corezoid`,
+# which itself references ssl/corezoid.crt/.key — running `nginx -t` any earlier (e.g. right
+# after templating, before the cert copy + symlinks above) would fail on a clean bootstrap
+# because those files don't exist yet.
+- name: Validate nginx configuration
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  tags:
+    - front-capi-all
+    - front-capi-nginx-setup
 
 
 # Enable and start Nginx service
