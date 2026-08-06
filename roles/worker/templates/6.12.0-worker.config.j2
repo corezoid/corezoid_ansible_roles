@@ -1134,7 +1134,7 @@
 {% if worker_converter_is_enabled | default("false") == "true" %}
       %% plugins unload archive task
       {plugins_unload_archive_task, [
-          {host, '{{ rmq_host }}'},
+          {host, '{{ final_tasks_rmq_host | default(rmq_host) }}'},
           {port, {{ rmq_port }}},
           {exchange, <<"FinalTasksLogsExchange">>},
           {queue, <<"{% raw %}FinalTasksLogsQ{{=i}}{% endraw %}">>},
