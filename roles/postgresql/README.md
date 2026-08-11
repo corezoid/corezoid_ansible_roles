@@ -60,6 +60,11 @@ db_shards:
 
 db_archive_shards:
   - { host: "{{ db_main.host }}", user: "{{ db_main.user }}", pass: "{{ db_app_user_pass_enc }}", shards: "{{ real_db_numbers }}" }
+
+# optional: hosts for the pgsql_task_history section only.
+# If omitted, tasks_history uses db_archive_shards (previous behaviour).
+db_task_history_shards:
+  - { host: "{{ db_main.host }}", user: "{{ db_main.user }}", pass: "{{ db_app_user_pass_enc }}", shards: "{{ real_db_numbers }}" }
 ```
 ### Required Variables for box-credential.yml example
 
