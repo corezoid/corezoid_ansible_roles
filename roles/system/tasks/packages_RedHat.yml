@@ -1,0 +1,39 @@
+---
+# RHEL/CentOS/OracleLinux/Amazon base packages.
+# Best-effort (failed_when: false), one package at a time — unchanged from the
+# original in-line loop to avoid regression on the 35+ existing RHEL environments.
+- name: Install base packages one by one
+  ansible.builtin.yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+    # lock_timeout: 360
+  loop:
+    - "bind-utils"
+    - "mc"
+    - "atop"
+    - "htop"
+    - "iotop"
+    - "iftop"
+    - "wget"
+    - "bind-libs"
+    - "lsof"
+    - "screen"
+    - "mlocate"
+    - "nc"
+    - "mtr"
+    - "tcpdump"
+    - "pigz"
+    - "pwgen"
+    - "glibc"
+    - "vim"
+    - "net-tools"
+    - "jq"
+    - "bash-completion"
+    - "cronie"
+    - "sysstat"
+  register: package_result
+  failed_when: false
+  tags:
+    - system-all
+    - system-rpm

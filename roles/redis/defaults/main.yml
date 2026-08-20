@@ -1,2 +1,14 @@
 ---
 # defaults file for redis
+
+# --- Debian/Ubuntu install (tasks/install_Debian.yml) ---
+# Official Redis Ltd apt repo (Ubuntu's own redis-server on jammy is 6.0.x, too old for
+# the 7.x-only directives in templates/redis-box-*.conf.j2).
+redis_apt_key_url: "https://packages.redis.io/gpg"
+redis_apt_repo_url: "https://packages.redis.io/deb"
+
+# Debian package epoch/revision for the pinned redis_version (set per-env, e.g. box.yml).
+# Confirmed present on packages.redis.io at implementation time (2026-07-09):
+# redis-server/redis-tools 6:7.2.4-1rl1~jammy1 for jammy.
+redis_deb_epoch: "6"
+redis_deb_package_revision: "1rl1~jammy1"

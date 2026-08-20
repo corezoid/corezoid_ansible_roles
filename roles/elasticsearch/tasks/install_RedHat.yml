@@ -1,0 +1,96 @@
+# RHEL/CentOS/OracleLinux/Amazon install path — moved VERBATIM from tasks/main.yml
+# (yum repo + java + elasticsearch + nginx). Byte-for-byte with the pre-port role.
+
+# Configure Elasticsearch repository
+# Sets up the repository configuration for the specified Elasticsearch version
+- name: Add Elasticsearch repo
+  template:
+    src: templates/{{ elasticsearch.version }}-elasticsearch.repo.j2
+    dest: /etc/yum.repos.d/elasticsearch.repo
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+    - elasticsearch-repo-install
+
+# Clean YUM cache
+# Ensures fresh package metadata for installation
+- name: Yum clean all
+  command: yum clean all
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+
+# Install Java for Amazon Linux 2
+# Sets up OpenJDK 11 using amazon-linux-extras
+- name: Install Java
+  shell: amazon-linux-extras install java-openjdk11 -y
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+
+# Install Java for Amazon Linux 2023
+# Sets up Java 11 using standard package manager
+- name: Install Java AMI3
+  shell: yum install java-11 -y
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+
+# Install Java for RedHat-based systems
+# Sets up OpenJDK 11 for CentOS/RHEL/Oracle Linux
+- name: Install Java
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  with_items:
+    - "java-11-openjdk"
+    - "java-11-openjdk-headless"
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "8"
+
+# Configure crypto policies for CentOS 9
+# Updates crypto policies to support required algorithms
+- name: update-crypto-policies elasticsearch Centos 9
+  shell: update-crypto-policies --set DEFAULT:SHA1
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "9"
+
+# Install Elasticsearch package
+# Installs the specified version of Elasticsearch from configured repository
+- name: Install elasticsearch packages
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+    disablerepo: "*"
+    enablerepo: "elasticsearch*"
+  with_items:
+    - "elasticsearch-{{ elasticsearch.version }}.*"
+  notify:
+    - restart elasticsearch
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+
+# Install Nginx web server
+# Sets up Nginx for proxying Elasticsearch requests
+- name: Install nginx packages
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  with_items:
+    - "nginx"
+  notify:
+    - restart elasticsearch
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install

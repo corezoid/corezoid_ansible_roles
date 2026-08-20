@@ -29,7 +29,33 @@
     - usercode-all
     - usercode-install
 
-# Configure network kernel parameters
+# Install eu-stack (elfutils) — needed since 6.13 to capture native stacks of a
+# stuck cnode (V8 14). gdb is the alternative; elfutils is lighter on the cnode.
+# elfutils ships in the base OS repo (BaseOS), not aws-corezoid, so install from
+# the default enabled repos across all supported RPM OSes (CentOS/RHEL/OracleLinux
+# 7/8/9, Amazon Linux 2/2023, x86 & arm). Best-effort: some client boxes are
+# air-gapped or on EOL base repos (e.g. CentOS 7) — a missing repo must NOT break
+# the usercode rollout, since eu-stack is a diagnostic aid, not a runtime dep. To
+# guarantee it everywhere, add elfutils to the aws-corezoid repo build.
+- name: Install elfutils (eu-stack) for cnode native stack dumps
+  yum:
+    name: elfutils
+    state: present
+  register: usercode_elfutils
+  failed_when: false
+  tags:
+    - usercode-all
+    - usercode-install
+
+- name: Warn if elfutils could not be installed (native cnode stacks won't be capturable here)
+  debug:
+    msg: "elfutils not installed on {{ inventory_hostname }} ({{ ansible_distribution }} {{ ansible_distribution_major_version }}) — install it manually or add it to the aws-corezoid repo."
+  when: usercode_elfutils is failed or (usercode_elfutils.rc is defined and usercode_elfutils.rc != 0)
+  tags:
+    - usercode-all
+    - usercode-install
+
+# Configure kernel parameters (network + memory/VM for V8 cnode workload)
 - name: Configure sysctl parameters in /etc/sysctl.conf
   lineinfile:
     path: /etc/sysctl.conf
@@ -38,6 +64,10 @@
   loop:
     - "net.core.rmem_max = 209715200"
     - "net.core.wmem_max = 209715200"
+    - "vm.overcommit_memory = 1"
+    - "vm.overcommit_ratio = 100"
+    - "vm.max_map_count = 262144"
+    - "kernel.yama.ptrace_scope = 0"
   tags:
     - usercode-all
     - usercode-sysctl

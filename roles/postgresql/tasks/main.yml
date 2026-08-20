@@ -1,14 +1,46 @@
 ---
-# Add the PostgreSQL repository configuration
-- name: Add PostgreSQL Repo
-  include: add_repo.yml
+# Guardrail: this role now supports RedHat/Amazon (unchanged) and Debian/Ubuntu.
+- name: Assert supported OS family
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family in ['RedHat', 'Debian']
+    fail_msg: "postgresql role supports only RedHat/Debian families, got '{{ ansible_os_family }}'"
+    quiet: true
+  tags:
+    - pgsql-all
+    - pgsql-assert
+
+# Add the PostgreSQL repository configuration (RedHat/Amazon only).
+# STATIC import_tasks (not include_tasks): the file name is static and its inner tasks carry legacy
+# `postgresql-*` tags that operators select directly (e.g. --tags postgresql-maintenance-cron). A
+# static import keeps those inner tags reachable; a dynamic include would hide them unless the
+# include task itself were selected. `when` propagates to all imported tasks (RedHat-only, unchanged).
+- name: Add PostgreSQL Repo (RedHat/Amazon)
+  ansible.builtin.import_tasks: add_repo.yml
+  when: ansible_os_family == "RedHat"
   tags:
     - pgsql-all
     - pgsql-init
 
-# Perform initial PostgreSQL installation and setup
-- name: First run
-  include: install.yml
+# Initial PostgreSQL install + setup (RedHat/Amazon only) — static import for the same tag-reachability
+# reason (install.yml carries maintenance/cron/install `postgresql-*` tags used for selective runs).
+- name: First run (RedHat/Amazon)
+  ansible.builtin.import_tasks: install.yml
+  when: ansible_os_family == "RedHat"
+  tags:
+    - pgsql-all
+    - pgsql-init
+
+# Debian/Ubuntu: PGDG apt repo + install + relocated cluster on {{ db_port }} +
+# listen/pg_hba + replication readiness (phase 1). Mirrors the RedHat repo+install split.
+- name: Debian setup (repo + install + cluster + replication prereqs)
+  ansible.builtin.include_tasks:
+    file: install_Debian.yml
+    apply:
+      tags:
+        - pgsql-all
+        - pgsql-init
+  when: ansible_os_family == "Debian"
   tags:
     - pgsql-all
     - pgsql-init
@@ -46,6 +78,7 @@
 
 # Display the selected psycopg2 package and distribution information
 - debug: msg="{{ psycopg2_rpm }} - {{ ansible_distribution }} - {{ ansible_distribution_major_version }}"
+  when: psycopg2_rpm is defined
   tags:
     - pgsql-all
     - pgsql-install-deps
@@ -60,6 +93,17 @@
     - "{{ psycopg2_rpm }}"
   when:
     - psycopg2_rpm is defined
+  tags:
+    - pgsql-all
+    - pgsql-install-deps
+
+# Debian/Ubuntu: psycopg2 (required by the postgresql_* Ansible modules) via apt
+- name: Install python3-psycopg2 for Debian
+  ansible.builtin.apt:
+    name: python3-psycopg2
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "Debian"
   tags:
     - pgsql-all
     - pgsql-install-deps
@@ -88,9 +132,12 @@
     name={{ item.name }}
     role_attr_flags={{ item.role_attr }}
     encrypted=true
+  become: true
+  become_user: "{{ 'postgres' if ansible_os_family == 'Debian' else 'root' }}"
   with_items:
     - { name: "viewers", role_attr: "NOLOGIN" }
     - { name: "appusers", role_attr: "NOLOGIN" }
+  when: not (pg_phase1_only | default(false))
   tags:
     - pgsql-all
     - pgsql-create-roles
@@ -103,6 +150,9 @@
     name={{ db_app_user }}
     password={{ db_app_user_pass_enc }}
     encrypted=yes
+  become: true
+  become_user: "{{ 'postgres' if ansible_os_family == 'Debian' else 'root' }}"
+  when: not (pg_phase1_only | default(false))
   tags:
     - pgsql-all
     - pgsql-create-app-user
@@ -115,6 +165,9 @@
     name={{ db_fdw_user }}
     password={{ db_fdw_user_pass_enc }}
     encrypted=yes
+  become: true
+  become_user: "{{ 'postgres' if ansible_os_family == 'Debian' else 'root' }}"
+  when: not (pg_phase1_only | default(false))
   tags:
     - pgsql-all
     - pgsql-create-fdw-user
@@ -124,6 +177,7 @@
   become: yes
   become_user: postgres
   shell: psql -p {{ db_main.port }} postgres -U postgres -Atc "GRANT appusers TO {{ db_main.user }};"
+  when: not (pg_phase1_only | default(false))
   tags:
     - pgsql-all
     - pgsql-grant-role-to-app-user
@@ -133,17 +187,20 @@
   become: yes
   become_user: postgres
   shell: psql -p {{ db_main.port }} postgres -U postgres -Atc "GRANT appusers TO {{ db_fdw_user }};"
+  when: not (pg_phase1_only | default(false))
   tags:
     - pgsql-all
     - pgsql-grant-role-to-app-user
 
 # Create main system and application databases
+# PHASE-GATED: DB creation + schema deploy are deferred in phase-1-only runs
+# (pg_phase1_only: true). Defaults to false so existing RHEL behavior is UNCHANGED.
 - name: Create main dbs
   postgresql_db: >
     name={{ item }}
     login_host={{ db_main.host }}
     port={{ db_main.port }}
-  with_items:
+  with_items: &main_dbs
     - conveyor
     - cce
     - health_check
@@ -155,6 +212,31 @@
     - corezoid_counters
     - graphinstaller
     - apigw
+  when:
+    - not (pg_phase1_only | default(false))
+    - not (pg_shards_only | default(false))
+    - ansible_os_family == "RedHat"
+  tags:
+    - pgsql-all
+    - pgsql-create-main-dbs
+
+# Debian twin: connect via local unix socket (no login_host) as postgres (peer) — our secure
+# pg_hba has no trust and only md5 loopback, so a TCP login_host would be rejected.
+# pg_shards_only guards this from ever running on a shard master even if an operator forgets
+# --skip-tags pgsql-create-main-dbs (see pg_shards_phase2.yml, which sets pg_shards_only: true) —
+# without it, this Debian-socket task would create the MAIN dbs locally on the shard host itself.
+- name: Create main dbs (Debian, socket)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_db:
+    name: "{{ item }}"
+    port: "{{ db_main.port }}"
+    login_unix_socket: /var/run/postgresql
+  with_items: *main_dbs
+  when:
+    - not (pg_phase1_only | default(false))
+    - not (pg_shards_only | default(false))
+    - ansible_os_family == "Debian"
   tags:
     - pgsql-all
     - pgsql-create-main-dbs
@@ -166,11 +248,32 @@
     login_host={{ db_main.host }}
     port={{ db_main.port }}
     owner={{ db_main.user }}
-  with_items:
+  with_items: &owned_dbs
     - accounts
     - graphinstaller
     - git_call
     - apigw
+  when:
+    - not (pg_phase1_only | default(false))
+    - not (pg_shards_only | default(false))
+    - ansible_os_family == "RedHat"
+  tags:
+    - pgsql-all
+    - pgsql-create-main-dbs
+
+- name: Change owner (Debian, socket)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_db:
+    name: "{{ item }}"
+    port: "{{ db_main.port }}"
+    login_unix_socket: /var/run/postgresql
+    owner: "{{ db_main.user }}"
+  with_items: *owned_dbs
+  when:
+    - not (pg_phase1_only | default(false))
+    - not (pg_shards_only | default(false))
+    - ansible_os_family == "Debian"
   tags:
     - pgsql-all
     - pgsql-create-main-dbs
@@ -182,6 +285,26 @@
     login_host={{ db_main.host }}
     port={{ db_main.port }}
   with_items: '{{ real_db_numbers }}'
+  when:
+    - not (pg_phase1_only | default(false))
+    - ansible_os_family == "RedHat"
+  tags:
+    - pgsql-all
+    - pgsql-create-shard-dbs
+
+# Debian twin: same pattern as "Create main dbs (Debian, socket)" above — local unix socket,
+# peer auth as postgres, no login_host (our secure pg_hba has no trust).
+- name: Create shards db (Debian, socket)
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_db:
+    name: "cp{{ item }}"
+    port: "{{ db_main.port }}"
+    login_unix_socket: /var/run/postgresql
+  with_items: '{{ real_db_numbers }}'
+  when:
+    - not (pg_phase1_only | default(false))
+    - ansible_os_family == "Debian"
   tags:
     - pgsql-all
     - pgsql-create-shard-dbs
@@ -202,9 +325,108 @@
     loop_var: outer_item
   async: 60
   poll: 6
+  when:
+    - not (pg_phase1_only | default(false))
+    - not (pg_shards_only | default(false))
   tags:
     - pgsql-all
     - pgsql-deploy-main-schema
+
+# FDW prerequisites for shard databases. cp.sql (schema deploy below) does
+# `CREATE FOREIGN TABLE public.conveyor_fdw ... SERVER conveyor_wrapper` — that statement needs the
+# postgres_fdw extension, the conveyor_wrapper SERVER, and a USER MAPPING to already exist on cp<N>,
+# otherwise it errors and is silently swallowed by the lenient schema load (no CREATE SERVER/USER
+# MAPPING exists anywhere else in this role — every other client env that uses this shared role has
+# apparently set this up manually out-of-band). Direction is shard -> main: each cp<N> reads
+# conveyor.conveyor_fdw on db_main via fdw_user (already created with the same password on every
+# cluster by "Create fdw_user" above, and already granted SELECT on conveyor's tables via the
+# appusers membership granted in create_db_from_schema.yml). Gated behind pg_setup_shard_fdw
+# (default false) so existing client envs that already provisioned this manually are unaffected —
+# only opt in per-env once DNS/reachability to db_main is confirmed from the shard tier.
+- name: Create postgres_fdw extension on shards db
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_ext:
+    db: "cp{{ item }}"
+    name: postgres_fdw
+    port: "{{ db_main.port }}"
+    login_unix_socket: /var/run/postgresql
+  with_items: '{{ real_db_numbers }}'
+  when:
+    - not (pg_phase1_only | default(false))
+    - pg_setup_shard_fdw | default(false)
+  tags:
+    - pgsql-all
+    - pgsql-deploy-shards-schema
+    - pgsql-fdw-server
+
+# Reconciled create-or-update (not create-only): a stale host/port/dbname on the SERVER, or a
+# rotated db_fdw_user_pass, would otherwise leave conveyor_fdw silently broken forever after the
+# first successful run (CREATE ... IF NOT EXISTS never touches an existing object's options).
+# -v ON_ERROR_STOP=1: this is a hard prerequisite for cp.sql's CREATE FOREIGN TABLE — a failure
+# here must fail the play, not be swallowed like the lenient schema load further down. Uses
+# \gset/\if (NOT a PL/pgSQL DO block): psql's :'name' variable substitution does not expand inside
+# a dollar-quoted DO body (it's an opaque string token to psql's lexer), so the conditional has to
+# live at the top-level psql-script layer instead, where :'name'/: "name" substitution does apply.
+# pg_fdw_main_host overrides db_main.host for envs where the shard tier can't resolve db_main's
+# FQDN (e.g. no internal DNS zone yet) but can reach it by IP — defaults to db_main.host so this is
+# a no-op everywhere DNS already works.
+- name: Reconcile conveyor_wrapper foreign server on shards db
+  become: true
+  become_user: postgres
+  shell: |
+    psql -v ON_ERROR_STOP=1 -p {{ db_main.port }} -U postgres cp{{ item }} \
+      -v pg_host="{{ pg_fdw_main_host | default(db_main.host) }}" -v pg_port="{{ db_main.port }}" <<'EOF'
+    SELECT EXISTS (SELECT 1 FROM pg_foreign_server WHERE srvname = 'conveyor_wrapper') AS server_exists \gset
+    \if :server_exists
+    ALTER SERVER conveyor_wrapper OPTIONS (SET host :'pg_host', SET port :'pg_port', SET dbname 'conveyor');
+    \else
+    CREATE SERVER conveyor_wrapper FOREIGN DATA WRAPPER postgres_fdw OPTIONS (host :'pg_host', port :'pg_port', dbname 'conveyor');
+    \endif
+    EOF
+  with_items: '{{ real_db_numbers }}'
+  when:
+    - not (pg_phase1_only | default(false))
+    - pg_setup_shard_fdw | default(false)
+  tags:
+    - pgsql-all
+    - pgsql-deploy-shards-schema
+    - pgsql-fdw-server
+
+# Mapping is scoped to db_main.user (the actual application login role, already granted appusers'
+# ALL_IN_SCHEMA privileges on conveyor incl. conveyor_fdw) rather than FOR PUBLIC, so the fdw_user
+# remote credential isn't installed for every local role on the shard db (e.g. viewers/zabbix) —
+# only the one role that legitimately needs to traverse the foreign table gets it. Reconciled the
+# same way as the server above (ALTER when present, since CREATE USER MAPPING has no IF NOT EXISTS
+# and a rotated db_fdw_user_pass must actually take effect on rerun); same \gset/\if + ON_ERROR_STOP
+# rationale — db_fdw_user_pass is a secret and must never be spliced into SQL as a raw literal, and
+# :'name' substitution must happen outside any dollar-quoted block.
+- name: Reconcile user mapping for conveyor_wrapper on shards db
+  become: true
+  become_user: postgres
+  shell: |
+    psql -v ON_ERROR_STOP=1 -p {{ db_main.port }} -U postgres cp{{ item }} \
+      -v pg_dbuser="{{ db_main.user }}" -v pg_fdwuser="{{ db_fdw_user }}" -v pg_fdwpass="{{ db_fdw_user_pass }}" <<'EOF'
+    SELECT EXISTS (
+      SELECT 1 FROM pg_user_mapping um
+      JOIN pg_foreign_server fs ON um.umserver = fs.oid
+      JOIN pg_roles r ON um.umuser = r.oid
+      WHERE fs.srvname = 'conveyor_wrapper' AND r.rolname = :'pg_dbuser'
+    ) AS mapping_exists \gset
+    \if :mapping_exists
+    ALTER USER MAPPING FOR :"pg_dbuser" SERVER conveyor_wrapper OPTIONS (SET user :'pg_fdwuser', SET password :'pg_fdwpass');
+    \else
+    CREATE USER MAPPING FOR :"pg_dbuser" SERVER conveyor_wrapper OPTIONS (user :'pg_fdwuser', password :'pg_fdwpass');
+    \endif
+    EOF
+  with_items: '{{ real_db_numbers }}'
+  when:
+    - not (pg_phase1_only | default(false))
+    - pg_setup_shard_fdw | default(false)
+  tags:
+    - pgsql-all
+    - pgsql-deploy-shards-schema
+    - pgsql-fdw-server
 
 # Deploy schema to shard databases
 - name: Deploy db schema for shards db
@@ -214,6 +436,7 @@
     loop_var: outer_item
   async: 60
   poll: "{{ real_db_numbers }}"
+  when: not (pg_phase1_only | default(false))
   tags:
     - pgsql-all
     - pgsql-deploy-shards-schema
@@ -226,6 +449,7 @@
     loop_var: outer_item
   async: 60
   poll: "{{ real_db_numbers }}"
+  when: not (pg_phase1_only | default(false))
   tags:
     - pgsql-all
     - pgsql-deploy-shards-schema
@@ -237,13 +461,19 @@
     - { "name": "{{ db_monitoring_user }}", "password": "{{ db_monitoring_user_password }}" }
   loop_control:
     loop_var: outer_item
+  when: not (pg_phase1_only | default(false))
   tags:
     - pgsql-all
     - pgsql-create-viewers
 
-# Configure connection pooling with PgBouncer
+# Configure connection pooling with PgBouncer (runs in phase 1 — NOT phase-gated)
 - name: Init PgBouncer
-  include: pgbouncer.yml
+  ansible.builtin.include_tasks:
+    file: pgbouncer.yml
+    apply:
+      tags:
+        - pgsql-all
+        - pgsql-pgbouncer
   tags:
     - pgsql-all
     - pgsql-pgbouncer

@@ -1,0 +1,27 @@
+---
+# Debian/Ubuntu monit install (apt, from universe) + main config at /etc/monit/monitrc.
+# Same monit.conf.j2 template as RHEL — it only sets idfile/statefile/httpd and
+# include /etc/monit.d/*, all valid on Debian. monitrc MUST be mode 0600 or monit
+# refuses to start.
+- name: Install monit (Debian)
+  ansible.builtin.apt:
+    name: monit
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  tags:
+    - system-all
+    - system-monit
+    - system-monit-install
+
+- name: Create monitrc file (Debian)
+  template:
+    src: templates/monit.conf.j2
+    dest: /etc/monit/monitrc
+    owner: root
+    group: root
+    mode: 0600
+  tags:
+    - system-all
+    - system-monit
+    - system-monit-config

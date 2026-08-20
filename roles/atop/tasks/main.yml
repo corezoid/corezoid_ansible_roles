@@ -1,11 +1,33 @@
 ---
 # tasks file for atop
 
-- name: Install atop package
+- name: Assert supported OS family
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family in ['RedHat', 'Debian']
+    fail_msg: "atop role supports only RedHat/Debian families, got '{{ ansible_os_family }}'"
+    quiet: true
+  tags:
+    - atop-all
+    - atop-assert
+
+- name: Install atop package (RedHat)
   ansible.builtin.yum:
     name: atop
     state: present
     update_cache: yes
+  when: ansible_os_family == "RedHat"
+  tags:
+    - atop-all
+    - atop-install
+
+- name: Install atop package (Debian)
+  ansible.builtin.apt:
+    name: atop
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
   tags:
     - atop-all
     - atop-install
@@ -34,13 +56,27 @@
     - atop-all
     - atop-install
 
-- name: Deploy atop sysconfig
+- name: Deploy atop sysconfig (RedHat)
   template:
     src: templates/atop.j2
     dest: /etc/sysconfig/atop
     owner: root
     group: root
     mode: "0644"
+  when: ansible_os_family == "RedHat"
+  notify: restart atop
+  tags:
+    - atop-all
+    - atop-config
+
+- name: Deploy atop defaults (Debian)
+  template:
+    src: templates/atop-default.j2
+    dest: /etc/default/atop
+    owner: root
+    group: root
+    mode: "0644"
+  when: ansible_os_family == "Debian"
   notify: restart atop
   tags:
     - atop-all
@@ -57,11 +93,15 @@
     - atop-all
     - atop-config
 
-- name: Enable atop-rotate timer
+# RHEL atop ships atop-rotate.timer to roll the daily log; on Debian/Ubuntu the
+# packaged atop provides its own rotation (cron/timer) and this unit may be absent,
+# so gate to RedHat. The logrotate stamp config below handles compression on both.
+- name: Enable atop-rotate timer (RedHat)
   systemd:
     name: atop-rotate.timer
     enabled: yes
     state: started
+  when: ansible_os_family == "RedHat"
   tags:
     - atop-all
     - atop-service

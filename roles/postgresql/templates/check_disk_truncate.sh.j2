@@ -1,0 +1,35 @@
+#!/bin/bash
+# {{ ansible_managed }}
+# Emergency disk-usage guard: run "maintenance.sh truncate_all" if the
+# data filesystem usage reaches the threshold. Invoked every 30 min by cron.
+set -euo pipefail
+
+MOUNT_POINT="${MOUNT_POINT:-{{ disk_truncate_mount_point | default(db_dir) }}}"
+THRESHOLD="${THRESHOLD:-{{ disk_truncate_threshold | default(95) }}}"
+SCRIPTS_DIR="${SCRIPTS_DIR:-{{ db_dir }}/scripts}"
+LOG_FILE="${LOG_FILE:-{{ db_dir }}/scripts/check_disk_truncate.log}"
+LOCK_FILE="/tmp/check_disk_truncate.lock"
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') :: $*" | tee -a "${LOG_FILE}"
+}
+
+if [ -f "${LOCK_FILE}" ]; then
+    log "INFO :: Lock file exists (${LOCK_FILE}), skipping"
+    exit 0
+fi
+trap 'rm -f "${LOCK_FILE}"' EXIT
+touch "${LOCK_FILE}"
+
+USAGE=$(df --output=pcent "${MOUNT_POINT}" | tail -1 | tr -d ' %')
+
+log "INFO :: Disk usage on ${MOUNT_POINT}: ${USAGE}%"
+
+if [ "${USAGE}" -ge "${THRESHOLD}" ]; then
+    log "WARN :: Threshold ${THRESHOLD}% reached (current: ${USAGE}%). Running truncate_all..."
+    cd "${SCRIPTS_DIR}"
+    bash maintenance.sh truncate_all >> "${LOG_FILE}" 2>&1
+    log "INFO :: truncate_all completed"
+else
+    log "INFO :: OK — below threshold (${THRESHOLD}%)"
+fi

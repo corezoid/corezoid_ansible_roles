@@ -1,3 +1,8 @@
 ---
 # handlers file for yum
 
+# Notified by the Amazon Linux 2 epel-release task. Was referenced but never
+# defined (latent bug) — define it so an epel change on Amazon-2 doesn't fail the play.
+- name: yum-clean-metadata
+  ansible.builtin.command: yum clean metadata
+  changed_when: false
