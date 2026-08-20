@@ -1,42 +1,97 @@
 ---
-# Family split: package acquisition (repo + java + elasticsearch + nginx) is the only
-# RHEL/Debian divergence in this role (everything below "Create main Elasticsearch
-# directory" is portable). RHEL body moved verbatim to install_RedHat.yml; Debian/Ubuntu
-# uses Elastic's apt repo + distro nginx (install_Debian.yml).
-- name: Assert supported OS family
-  ansible.builtin.assert:
-    that:
-      - ansible_os_family in ['RedHat', 'Debian']
-    fail_msg: "elasticsearch role supports only RedHat/Debian, got '{{ ansible_os_family }}'"
-    quiet: true
-  tags: [elasticsearch-all, elasticsearch-install]
+# Configure Elasticsearch repository
+# Sets up the repository configuration for the specified Elasticsearch version
+- name: Add Elasticsearch repo
+  template:
+    src: templates/{{ elasticsearch.version }}-elasticsearch.repo.j2
+    dest: /etc/yum.repos.d/elasticsearch.repo
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+    - elasticsearch-repo-install
 
-# Tags on a dynamic `include_tasks` gate whether Ansible walks into the file at all — unlike
-# `import_tasks`, they are NOT reliably inherited by tasks inside it (confirmed empirically),
-# so the include must ALSO carry `apply.tags`, or a targeted `--tags elasticsearch-repo-install`
-# run (an existing tag on the RHEL repo task, preserved verbatim in install_RedHat.yml) would
-# silently skip the whole include. IMPORTANT: `apply.tags` is unioned onto EVERY task in the
-# included file (confirmed empirically) — it must therefore hold only the tags common to every
-# task (elasticsearch-all/-install), NOT the narrower elasticsearch-repo-install tag, or every
-# task in install_RedHat.yml (java, crypto-policies, nginx install, ...) would incorrectly
-# start matching a `--tags elasticsearch-repo-install` run too. The narrow tag stays only on
-# the include's own `tags:` (so the walk-in happens) and on the repo task's own literal tag
-# (unchanged, preserved verbatim) so only that one task actually matches the narrow filter.
-- name: RedHat/Amazon install (repo + java + elasticsearch + nginx)
-  include_tasks:
-    file: install_RedHat.yml
-    apply:
-      tags: [elasticsearch-all, elasticsearch-install]
-  when: ansible_os_family == 'RedHat'
-  tags: [elasticsearch-all, elasticsearch-install, elasticsearch-repo-install]
+# Clean YUM cache
+# Ensures fresh package metadata for installation
+- name: Yum clean all
+  command: yum clean all
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
 
-- name: Debian install (apt repo + elasticsearch + nginx)
-  include_tasks:
-    file: install_Debian.yml
-    apply:
-      tags: [elasticsearch-all, elasticsearch-install]
-  when: ansible_os_family == 'Debian'
-  tags: [elasticsearch-all, elasticsearch-install, elasticsearch-repo-install]
+# Install Java for Amazon Linux 2
+# Sets up OpenJDK 11 using amazon-linux-extras
+- name: Install Java
+  shell: amazon-linux-extras install java-openjdk11 -y
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+
+# Install Java for Amazon Linux 2023
+# Sets up Java 11 using standard package manager
+- name: Install Java AMI3
+  shell: yum install java-11 -y
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2023"
+
+# Install Java for RedHat-based systems
+# Sets up OpenJDK 11 for CentOS/RHEL/Oracle Linux
+- name: Install Java
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  with_items:
+    - "java-11-openjdk"
+    - "java-11-openjdk-headless"
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "8"
+
+# Configure crypto policies for CentOS 9
+# Updates crypto policies to support required algorithms
+- name: update-crypto-policies elasticsearch Centos 9
+  shell: update-crypto-policies --set DEFAULT:SHA1
+  when:
+    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "9"
+
+# Install Elasticsearch package
+# Installs the specified version of Elasticsearch from configured repository
+- name: Install elasticsearch packages
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+    disablerepo: "*"
+    enablerepo: "elasticsearch*"
+  with_items:
+    - "elasticsearch-{{ elasticsearch.version }}.*"
+  notify:
+    - restart elasticsearch
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
+
+# Install Nginx web server
+# Sets up Nginx for proxying Elasticsearch requests
+- name: Install nginx packages
+  yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  with_items:
+    - "nginx"
+  notify:
+    - restart elasticsearch
+  tags:
+    - elasticsearch-all
+    - elasticsearch-install
 
 # Create main Elasticsearch directory
 # Sets up the primary directory structure with proper permissions
@@ -229,7 +284,7 @@
     - elasticsearch-security
 
 - name: Install expect for password automation
-  ansible.builtin.package:
+  yum:
     name: expect
     state: present
   when: elasticsearch.elastic_password is defined

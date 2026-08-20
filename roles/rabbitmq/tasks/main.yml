@@ -21,60 +21,119 @@
       - Erlang: Only 26.0.2 is supported. Current: {{ rmq_erl_version }}
   when: rmq_version != "3.12.2" or rmq_erl_version != "26.0.2"
 
-# Family split: package acquisition is the only RHEL/Debian divergence in this role
-# (everything below "copy erlang cookie" is portable). RHEL body moved verbatim to
-# install_RedHat.yml; Debian/Ubuntu uses Team RabbitMQ's apt repos (install_Debian.yml).
-- name: Assert supported OS family
-  ansible.builtin.assert:
-    that:
-      - ansible_os_family in ['RedHat', 'Debian']
-    fail_msg: "rabbitmq role supports only RedHat/Debian, got '{{ ansible_os_family }}'"
-    quiet: true
+# Set Rabbit package facts based on system
+# Determines appropriate Rabbit RPM package based on OS distribution, version and architecture
+- name: Set RabbitMQ package facts
+  set_fact:
+    rabbit_rpm_file: >-
+      {{ {
+        'CentOS-7-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'CentOS-8-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'CentOS-9-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'RedHat-7-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'RedHat-8-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'RedHat-9-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'OracleLinux-7-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'OracleLinux-8-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'OracleLinux-9-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'Amazon-2023-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'Amazon-2023-aarch64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm',
+        'Amazon-2-x86_64': 'rabbitmq-server-3.12.2-1.el8.noarch.rpm'
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+  when: rmq_version == "3.12.2" and rmq_erl_version == "26.0.2"
 
-    # `apply.tags` is required, not just the `tags:` on the include itself: dynamic
-    # `include_tasks` tags do NOT propagate to tasks inside the included file (confirmed
-    # empirically) — without `apply`, `--tags rabbit-install` would walk into this include
-    # but then skip every untagged task inside install_Debian.yml/install_RedHat.yml.
-- name: Install RabbitMQ + Erlang (RedHat/Amazon)
-  include_tasks:
-    file: install_RedHat.yml
-    apply:
-      tags:
-        - rabbit-all
-        - rabbit-install
-  when: ansible_os_family == 'RedHat'
+# Set Erlang package facts based on system
+# Determines appropriate Erlang RPM package based on OS distribution, version and architecture
+- name: Set Erlang package facts
+  set_fact:
+    erlang_rpm_file: >-
+      {{ {
+        'CentOS-7-x86_64': 'erlang-26.0.2-1.el7.x86_64.rpm',
+        'CentOS-8-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'CentOS-9-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'RedHat-7-x86_64': 'erlang-26.0.2-1.el7.x86_64.rpm',
+        'RedHat-8-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'RedHat-9-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'OracleLinux-7-x86_64': 'erlang-26.0.2-1.el7.x86_64.rpm',
+        'OracleLinux-8-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'OracleLinux-9-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'Amazon-2023-x86_64': 'erlang-26.0.2-1.el9.x86_64.rpm',
+        'Amazon-2023-aarch64': 'erlang-26.0.2-1.amzn2023.aarch64.rpm',
+        'Amazon-2-x86_64': 'erlang-26.0.2-1.el7.x86_64.rpm'
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+  when: rmq_version == "3.12.2" and rmq_erl_version == "26.0.2"
+
+# Set Socat package facts based on system
+# Determines appropriate Socat RPM package based on OS distribution, version and architecture
+- name: Set Socat package facts
+  set_fact:
+    socat_rpm_file: >-
+      {{ {
+        'CentOS-7-x86_64': 'socat-1.7.3.2-2.el7.x86_64.rpm',
+        'CentOS-8-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'CentOS-9-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'RedHat-7-x86_64': 'socat-1.7.3.2-2.el7.x86_64.rpm',
+        'RedHat-8-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'RedHat-9-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'OracleLinux-7-x86_64': 'socat-1.7.3.2-2.el7.x86_64.rpm',
+        'OracleLinux-8-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'OracleLinux-9-x86_64': 'socat-1.7.4.1-6.el9.x86_64.rpm',
+        'Amazon-2023-x86_64': 'socat-1.7.4.2-1.amzn2023.0.2.x86_64.rpm',
+        'Amazon-2023-aarch64': 'socat-1.7.4.2-1.amzn2023.0.2.aarch64.rpm',
+        'Amazon-2-x86_64': 'socat-1.7.3.2-2.el7.x86_64.rpm'
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+  when: rmq_version == "3.12.2" and rmq_erl_version == "26.0.2"
+
+# Debug selected RPM files
+- name: Debug selected RPM files
+  debug:
+    msg:
+      - "Selected RabbitMQ RPM: {{ rabbit_rpm_file }}"
+      - "Selected Erlang RPM: {{ erlang_rpm_file }}"
+      - "Selected Socat RPM: {{ socat_rpm_file }}"
+
+# Copy packages
+- name: Copy RabbitMQ packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  copy:
+    src: "files/{{ item }}"
+    dest: "/tmp/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  with_items:
+    - "{{ rabbit_rpm_file }}"
+    - "{{ erlang_rpm_file }}"
+    - "{{ socat_rpm_file }}"
   tags:
     - rabbit-all
     - rabbit-install
 
-- name: Install RabbitMQ + Erlang (Debian/Ubuntu)
-  include_tasks:
-    file: install_Debian.yml
-    apply:
-      tags:
-        - rabbit-all
-        - rabbit-install
-  when: ansible_os_family == 'Debian'
+# Install packages
+- name: Install RabbitMQ packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  command: yum install /tmp/{{ item }} -y
+  with_items:
+    - "{{ socat_rpm_file }}"
+    - "{{ erlang_rpm_file }}"
+    - "{{ rabbit_rpm_file }}"
+  ignore_errors: true
   tags:
     - rabbit-all
     - rabbit-install
 
-# Configure Erlang cookie for cluster authentication.
-# On Debian, `apt install rabbitmq-server` (the package task above) auto-starts the broker via a
-# postinst trigger BEFORE this task ever runs — the already-running BEAM VM loads whatever cookie is
-# on disk at that moment (an auto-generated one) into memory, and Erlang never re-reads
-# .erlang.cookie live. Left uncorrected, this task can rewrite the FILE while the RUNNING node keeps
-# authenticating with the old in-memory value forever, and every rabbitmqctl call below fails with
-# "Erlang distribution failed" even though the file on disk is right (confirmed via timestamps: on
-# ff_kyrgyztan_prod_hl the broker process started ~1 minute before this task first wrote the cookie).
-# `register` + the plain (non-handler) restart task further down fixes this only where
-# rmq_restart_on_cookie_change is explicitly set (see ansible/inventories/ff_kyrgyztan_prod_hl/cz-init.yml)
-# — a handler+flush_handlers approach was tried and rejected on adversarial review: flush_handlers is
-# play-global (would force-run any OTHER role's already-notified handler early, e.g. yum/atop in
-# shared plays) and untagged (invisible under selective --tags runs). A normal tagged task keyed off
-# these `register` results avoids both problems. Existing RHEL clients are untouched either way
-# (`yum install` does not auto-start services the way Debian's dpkg postinst does, which is likely
-# why this was never hit before).
+# Clean up installation packages
+- name: Remove RabbitMQ packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
+  file:
+    path: "/tmp/{{ item }}"
+    state: absent
+  with_items:
+    - "{{ rabbit_rpm_file }}"
+    - "{{ erlang_rpm_file }}"
+    - "{{ socat_rpm_file }}"
+  tags:
+    - rabbit-all
+    - rabbit-install
+
+# Configure Erlang cookie for cluster authentication
 - name: copy erlang cookie
   template:
     src: erlang.cookie.j2
@@ -83,27 +142,6 @@
     group: rabbitmq
     mode: 0400
     backup: yes
-  register: rmq_cookie_copy_result
-  tags:
-    - rabbitmq-all
-    - rabbitmq-install
-    - rabbitmq-install-cookie
-
-# Every rabbitmq_vhost/rabbitmq_user/rabbitmq_policy task below shells out to rabbitmqctl as
-# whatever user this play's `become` runs as (root, since no become_user is set here) — root needs
-# its OWN matching cookie to authenticate to the running node. Without this, rabbitmqctl gets a
-# freshly-generated random cookie in root's homedir on first-ever invocation and every rabbitmqctl
-# call fails with "TCP connection succeeded but Erlang distribution failed" (cookie mismatch), even
-# though the broker itself is up and healthy.
-- name: copy erlang cookie for root (rabbitmqctl runs as root via become)
-  template:
-    src: erlang.cookie.j2
-    dest: /root/.erlang.cookie
-    owner: root
-    group: root
-    mode: 0400
-    backup: yes
-  register: rmq_cookie_copy_root_result
   tags:
     - rabbitmq-all
     - rabbitmq-install
@@ -118,15 +156,11 @@
     group: "{{ rabbitmq_config_file_group }}"
     mode: "{{ rabbitmq_config_file_mode }}"
     backup: yes
-  register: rmq_config_copy_result
   tags:
     - rabbitmq-all
     - rabbitmq-set-pass
 
-# Configure system limits for file handles. Path is a distro-agnostic systemd drop-in
-# (/etc/systemd/system/rabbitmq-server.service.d/limits.conf), so this now applies on
-# both families; the original gate was RHEL-7/8-only (and buggy operator precedence),
-# which silently skipped Ubuntu — widened here so Debian/Ubuntu also gets LimitNOFILE.
+# Configure system limits for file handles (RHEL 7/8 only)
 - name: alter number of system's open file if rabbitmq_system_number_open_files is set
   block:
     - name: make sure service.d exists
@@ -139,7 +173,7 @@
         src: limits.conf.j2
         dest: "{{ rabbitmq_service_d_path }}/limits.conf"
         backup: true
-  when: rabbitmq_system_number_open_files is defined
+  when: rabbitmq_system_number_open_files is defined and ansible_os_family == "RedHat" and ansible_distribution_major_version == "7" or ansible_distribution_major_version == "8"
   tags:
     - rabbitmq-all
     - rabbitmq-set-pass
@@ -164,33 +198,6 @@
   tags:
     - rabbitmq-all
     - rabbitmq-enable-autostart
-
-# Plain tagged task (not a handler+flush_handlers — rejected on adversarial review: flush_handlers
-# is play-global and untagged, so it would force-run any OTHER role's already-notified handler early
-# in shared plays, and vanish under selective --tags runs). Gated on rmq_restart_on_cookie_change
-# (HL-only opt-in, see the "copy erlang cookie" comment above) AND on whether the cookie/config
-# actually changed — so on every other client (gate unset) and on any stable HL rerun (nothing
-# changed) this is a no-op, exactly like the tasks whose `register` results it checks. `is defined`
-# guards on each register (adversarial review finding): a selective --tags run can skip any subset of
-# the three producer tasks, so their result vars may not exist at all — dereferencing `.changed`
-# directly would fail the play with an undefined-variable error instead of just skipping. Tagged with
-# every producer task's tag (including rabbitmq-install-cookie) so this restart is reachable whenever
-# ANY of them would run, not just when all three do.
-- name: restart rabbitmq-server (cookie/config changed, opt-in only — picks up corrected in-memory state)
-  service:
-    name: rabbitmq-server
-    state: restarted
-  when:
-    - rmq_restart_on_cookie_change | default(false) | bool
-    - >
-      (rmq_cookie_copy_result is defined and rmq_cookie_copy_result.changed) or
-      (rmq_cookie_copy_root_result is defined and rmq_cookie_copy_root_result.changed) or
-      (rmq_config_copy_result is defined and rmq_config_copy_result.changed)
-  tags:
-    - rabbitmq-all
-    - rabbitmq-install
-    - rabbitmq-install-cookie
-    - rabbitmq-set-pass
 
 # Create required virtual hosts
 - name: ensure vhost is present

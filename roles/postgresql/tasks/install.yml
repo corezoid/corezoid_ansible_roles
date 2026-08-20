@@ -25,15 +25,6 @@
     - postgresql-maintenance
     - postgresql-maintenance-cron
 
-# Set default day-of-month for database cleanup tasks (every day)
-- name: set day-of-month for cron clean tasks archive
-  set_fact: tasks_archive_cron_day="*"
-  when: tasks_archive_cron_day is not defined
-  tags:
-    - postgresql-all
-    - postgresql-maintenance
-    - postgresql-maintenance-cron
-
 # Clean YUM cache before package installation
 - name: Yum clean all
   command: yum clean all
@@ -467,7 +458,6 @@
     user: postgres
     minute: "{{ tasks_archive_cron_minute }}"
     hour: "{{ tasks_archive_cron_hour }}"
-    day: "{{ tasks_archive_cron_day }}"
     weekday: "{{ tasks_archive_cron_weekday }}"
     job: "cd {{ db_dir }}/scripts; bash maintenance.sh truncate_all"
   tags:
@@ -483,53 +473,6 @@
     minute: 0
     hour: 21
     job: "cd {{ db_dir }}/scripts; bash maintenance.sh truncate_tasks_history"
-  tags:
-    - postgresql-all
-    - postgresql-maintenance
-    - postgresql-maintenance-cron
-
-# Emergency disk-usage guard (runs truncate_all when the data filesystem
-# reaches disk_truncate_threshold, default 95%).
-# Opt-in: enabled only on clients that set disk_truncate_enabled: true.
-# If a check_disk_truncate cron already exists on the host (hand-added or
-# previously managed), the deploy + cron are skipped so we never overwrite
-# or duplicate the working setup.
-- name: Check for existing check_disk_truncate cron
-  shell: crontab -l -u postgres 2>/dev/null | grep -F 'check_disk_truncate.sh' || true
-  register: existing_disk_truncate_cron
-  changed_when: false
-  check_mode: no
-  when: disk_truncate_enabled | default(false) | bool
-  tags:
-    - postgresql-all
-    - postgresql-maintenance
-    - postgresql-maintenance-file
-    - postgresql-maintenance-cron
-
-- name: Add check_disk_truncate.sh
-  template:
-    src: "templates/check_disk_truncate.sh.j2"
-    dest: "{{ db_dir }}/scripts/check_disk_truncate.sh"
-    mode: 0755
-    owner: postgres
-  when:
-    - disk_truncate_enabled | default(false) | bool
-    - (existing_disk_truncate_cron.stdout | default('')) | trim == ''
-  tags:
-    - postgresql-all
-    - postgresql-maintenance
-    - postgresql-maintenance-file
-
-# Configure emergency disk-usage check cron (every 30 minutes)
-- name: Add cron for emergency disk-usage truncate
-  cron:
-    name: "check disk usage and truncate"
-    user: postgres
-    minute: "*/30"
-    job: "bash {{ db_dir }}/scripts/check_disk_truncate.sh"
-  when:
-    - disk_truncate_enabled | default(false) | bool
-    - (existing_disk_truncate_cron.stdout | default('')) | trim == ''
   tags:
     - postgresql-all
     - postgresql-maintenance

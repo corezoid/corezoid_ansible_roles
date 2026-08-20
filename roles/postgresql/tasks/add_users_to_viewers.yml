@@ -8,8 +8,6 @@
 
 # Create the viewer user
 - name: create viewer user
-  become: true
-  become_user: "{{ 'postgres' if ansible_os_family == 'Debian' else 'root' }}"
   postgresql_user:
     db: postgres
     name: "{{ viewer_user.name }}"

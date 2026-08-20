@@ -1,16 +1,6 @@
 ---
 # tasks file for system
 
-- name: Assert supported OS family
-  ansible.builtin.assert:
-    that:
-      - ansible_os_family in ['RedHat', 'Debian']
-    fail_msg: "system role supports only RedHat/Debian families, got '{{ ansible_os_family }}'"
-    quiet: true
-  tags:
-    - system-all
-    - system-assert
-
 - name: Show CPU count
   ansible.builtin.debug:
     var:
@@ -170,20 +160,41 @@
     - ansible_distribution == "OracleLinux"
     - ansible_distribution_major_version == "9"
 
-- name: Install base packages (per OS family)
-  ansible.builtin.include_tasks:
-    file: "packages_{{ ansible_os_family }}.yml"
-    # Propagate tags to the included tasks (dynamic includes don't do this
-    # automatically) so tagged runs execute the package install.
-    apply:
-      tags:
-        - system-all
-        - system-rpm
-        - system-base-packages
+- name: Install base packages one by one
+  ansible.builtin.yum:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+    # lock_timeout: 360
+  loop:
+    - "bind-utils"
+    - "mc"
+    - "atop"
+    - "htop"
+    - "iotop"
+    - "iftop"
+    - "wget"
+    - "bind-libs"
+    - "lsof"
+    - "screen"
+    - "mlocate"
+    - "nc"
+    - "mtr"
+    - "tcpdump"
+    - "pigz"
+    - "pwgen"
+    - "glibc"
+    - "vim"
+    - "net-tools"
+    - "jq"
+    - "bash-completion"
+    - "cronie"
+    - "sysstat"
+  register: package_result
+  failed_when: false
   tags:
     - system-all
     - system-rpm
-    - system-base-packages
 
 - name: Install python36 for RHEL/CentOS/OracleLinux 8
   yum:

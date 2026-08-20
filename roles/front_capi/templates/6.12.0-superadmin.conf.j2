@@ -1,15 +1,11 @@
-{% if not (front_behind_lb | default(false)) %}
 server {
     listen 80;
         server_name {{ superadmin_endpoint }};
         rewrite ^/(.*)$ https://$host/$1 permanent;
 }
-{% endif %}
 
 server {
-{% if front_behind_lb | default(false) %}
-    listen 80;
-{% elif corezoid_api_sync.nginx_port is defined and corezoid_api_sync.nginx_port == 80 %}
+{% if corezoid_api_sync.nginx_port is defined and corezoid_api_sync.nginx_port == 80 %}
     listen {{ corezoid_api_sync.nginx_port }};
 {% else %}
     listen 443 ssl http2;

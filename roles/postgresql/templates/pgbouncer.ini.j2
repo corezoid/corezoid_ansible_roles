@@ -29,13 +29,8 @@ nondefaultdb = pool_size=100 reserve_pool=10
 ;;; Administrative settings
 ;;;
 
-{% if ansible_os_family == 'Debian' %}
-logfile = /var/log/postgresql/pgbouncer.log
-pidfile = /var/run/postgresql/pgbouncer.pid
-{% else %}
 logfile = /var/log/pgbouncer/pgbouncer.log
 pidfile = /var/run/pgbouncer/pgbouncer.pid
-{% endif %}
 
 ;;;
 ;;; Where to wait for clients

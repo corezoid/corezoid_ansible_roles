@@ -11,17 +11,3 @@ capi_es_host: "127.0.0.1"
 capi_es_port: 9200
 
 conf_agent_server_port: 8585
-
-# Behind a TLS-terminating on-prem HAProxy the front must serve the app on plain :80 with no
-# 301 redirect and no host-side :443 ssl block, or HAProxy's `GET /` health check gets a 301,
-# marks the backend DOWN, and users see 503 (see CLAUDE.md "Front nginx behind HAProxy").
-# Default false so every existing RHEL/direct-TLS env renders byte-identical.
-front_behind_lb: false
-
-# Debian/Ubuntu install (tasks/install_Debian.yml): corezoid-web-admin / conf-agent-client are
-# RPM-only (no .deb). Intentionally left UNSET here — each env must set the exact RPM
-# filenames (name-version-release.arch.rpm) for its corezoid_release before the Debian path
-# can run, so a missing override fails loudly (undefined var) instead of guessing a bucket
-# layout. e.g. in box.yml:
-#   front_capi_web_admin_rpm_filename: "corezoid-web-admin-6.12.0-1.el9.noarch.rpm"
-#   front_capi_conf_agent_client_rpm_filename: "conf-agent-client-2.6.3-1.el9.noarch.rpm"
