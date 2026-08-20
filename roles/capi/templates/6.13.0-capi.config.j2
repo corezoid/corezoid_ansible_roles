@@ -1,5 +1,17 @@
 %% -*- mode: erlang;  -*-
 [
+    {conveyor_task_store, [
+        {pgsql, [
+            {host, "{{ db_main.host }}"},
+            {dbname, "conveyor"},
+            {user, "{{ db_main.user }}"},
+            {password, "{{ db_main.pass }}"},
+            {start_size, 2},
+            {min_size, 2},
+            {max_size, 10}
+        ]}
+    ]},
+
     {conv_params, [
         {min_version, 2} %% application should deny creating task (copy/rpc) if params are not valid.
                         %% We have in database conveyor table conveyors field version. If version in DB >= min_version in config we run validator else ignore.

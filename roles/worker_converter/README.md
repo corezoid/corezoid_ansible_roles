@@ -35,6 +35,7 @@ worker_converter:
 
 #-------------worker_converter settings----------#
 worker_converter_is_enabled: "true"
+final_tasks_rmq_host: "rabbit-cz-c1.example.com"
 wc_es_url: "https://elasticsearch.example.com/"
 wc_es_index_template: "corezoid_final_tasks_$.date(%y-%m-%d)"
 wc_positive_filter_conv_ids:
