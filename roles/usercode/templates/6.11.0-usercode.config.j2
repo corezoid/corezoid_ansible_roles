@@ -134,7 +134,7 @@
         {encrypt_decrypt, [
         ]},
 {% endif %}
-        {memory_ratio_to_restart_cnode, 0.35}, %% min ratio to move pairs to cnodes
+        {memory_ratio_to_restart_cnode, {{ memory_ratio_to_restart_cnode | default(0.35) }}}, %% min ratio to move pairs to cnodes
         {maps_ratio_to_restart_cnode, 0.7}, %% min ratio to move pairs to cnodes
 
 
@@ -151,7 +151,7 @@
         {cnode_threshold_to_writing_log, 0.1}, %% max threshold to write it to log
         {max_exec_time_to_change_cnode_type, 0.1}, %% max exec piece of codes to change them to heavy node
 
-        {cnode_max_ram_available_mb, 31999}, %% in Mb
+        {cnode_max_ram_available_mb, {{ cnode_max_ram_available_mb | default(31999) }}}, %% in Mb
         {cnode_min_av_ram_to_clean_isolates, {{ usercode_cnode_min_av_ram_to_clean_isolates | default(26400) }}}, %% for supporting 2.2.1 version
         {cnode_min_av_ram_to_clean_isolates_mb, 1024}, %% in Mb if avaliable mem in system less then this - usercode start GC
         {cnode_max_used_per_isolate, {{ usercode_cnode_max_used_per_isolate | default(10) }}}, %% for supporting 2.2.1 version
