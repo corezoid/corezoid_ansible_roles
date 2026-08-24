@@ -1,18 +1,61 @@
 #!/bin/bash
+# Managed by Ansible (role postgresql) — INF-29864.
+# TRUNCATE of the shard tables goes through truncate_table_guarded(), which is
+# fail-closed: a partitioned table (relkind='p') or an inheritance parent is
+# SKIPped and an unreachable database is a refusal, never a blind TRUNCATE.
+# Rationale and the reference implementation: §7 of corezoid-partition-archive.md
+# in the corezoid_update_manuals repository (separate repo, not this one).
 PATH=${PATH}:/usr/pgsql-{{ db_version }}/bin
 
-DBNAMES=$(echo cp{0..9})
-#PGARGS="--port 5433 -h POSTGRES_RDS_ENDPOINT_CF"
-PGARGS="--port 5433"
-#PGARGS2="-p 5433  -h POSTGRES_RDS_ENDPOINT_CF"
-PGARGS2="-p 5433"
+PGARGS="--port {{ db_port }}"
+PGARGS2="-p {{ db_port }}"
 PG_BIN_PATH="/usr/pgsql-{{ db_version }}/bin"
-PG_DATA="/var/lib/pgsql/{{ db_version }}/data/base"
-SCRIPTS="/var/lib/pgsql/scripts"
+PG_DATA="{{ db_dir }}/{{ db_version }}/data/base"
+SCRIPTS="{{ db_dir }}/scripts"
 
 R_LOG="${SCRIPTS}/reglament.log"
+PARTMAN_LOG="${SCRIPTS}/partman_maintenance.log"
 
 cd ${SCRIPTS} || exit 1
+
+# Retention scope. Deliberately the same ten shards the previous revision of this
+# script used (`DBNAMES=$(echo cp{0..9})`): ten production environments declare a
+# hundred shards in real_db_numbers (ff_kyrgyztan_prod*, ff_morocco_prod,
+# ff_nigeria_prod, ff_vietnam_prod, corezoid.com, jusan-prod, ff_india_prod*…),
+# and widening a nightly TRUNCATE to cp10–cp99 there is a separate per-environment
+# decision, not a side effect of INF-29864. Single source for all three places the
+# pattern is used: this query, the DBNAME override and its FATAL text.
+SHARD_PATTERN='^cp[0-9]$'
+
+# Asked of the server instead of assumed, so a shard that does not exist is left
+# out instead of producing connection errors.
+DBNAMES=$(psql ${PGARGS} -d postgres -Atc \
+    "SELECT datname FROM pg_database WHERE datname ~ '${SHARD_PATTERN}' ORDER BY datname")
+
+# Optional single-shard override: DBNAME=cp3 bash maintenance.sh truncate_tasks_history
+# Validated twice — against the pattern (place 2 of 3) and against pg_database
+# (place 3 of 3) — so a typo is a FATAL, never a silent full-fleet run.
+if [ -n "${DBNAME:-}" ]; then
+    DBNAME_RC=0
+    if [[ "${DBNAME}" =~ ${SHARD_PATTERN} ]]; then
+        DBNAME_FOUND=$(psql ${PGARGS} -d postgres -Atc \
+            "SELECT 1 FROM pg_database WHERE datname = '${DBNAME}' AND datname ~ '${SHARD_PATTERN}'")
+        DBNAME_RC=$?
+    else
+        DBNAME_FOUND=""
+    fi
+    if [ ${DBNAME_RC} -ne 0 ] || [ "${DBNAME_FOUND}" != "1" ]; then
+        echo "FATAL: база '${DBNAME}' не існує або не відповідає шаблону ${SHARD_PATTERN}" >&2
+        exit 1
+    fi
+    DBNAMES="${DBNAME}"
+fi
+
+# An empty shard list means the list was not obtained (server down, wrong port),
+# not "nothing to do" — refuse rather than run a silent no-op.
+require_dbnames(){
+    [ -n "${DBNAMES}" ] || { echo "ОТКАЗ: список баз cp[0-9]+ пуст или не получен" >&2; return 1; }
+}
 
 check_exist_pgdb(){
     local DB
@@ -20,34 +63,146 @@ check_exist_pgdb(){
     nohup 1>/dev/null 2>/dev/null psql ${PGARGS} ${DB} -c 'select 1' || { echo "connection to ${DB} failed"; exit 1; }
 }
 
+# --- guard, fail closed -------------------------------------------------------
+
+# prints relkind ('r' | 'p' | ...) or an empty string; rc != 0 = check did not happen
+relkind_of(){
+    psql ${PGARGS} -d "$1" -Atc \
+        "SELECT c.relkind FROM pg_class c
+          WHERE c.oid = to_regclass('$2')" 2>/dev/null
+}
+
+# prints the schema-qualified name; autovacuum writes it that way in pg_stat_activity
+fqname_of(){
+    psql ${PGARGS} -d "$1" -Atc \
+        "SELECT n.nspname || '.' || c.relname FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.oid = to_regclass('$2')" 2>/dev/null
+}
+
+# prints the number of inheritance children; rc != 0 = check did not happen
+children_of(){
+    psql ${PGARGS} -d "$1" -Atc \
+        "SELECT count(*) FROM pg_inherits WHERE inhparent = to_regclass('$2')" 2>/dev/null
+}
+
+truncate_table_guarded(){
+    local DB TBL FQ KIND KIDS RC WRAP_PID
+    DB="$1"; TBL="$2"
+    KIND=$(relkind_of "${DB}" "${TBL}"); RC=$?
+    if [ ${RC} -ne 0 ]; then
+        echo "ОТКАЗ: ${DB}.${TBL} — проверка relkind не выполнена (psql rc=${RC}), TRUNCATE не выполняется" >&2
+        return 1
+    fi
+    if [ "${KIND}" != "r" ]; then
+        echo "SKIP: ${DB}.${TBL} не обычная таблица (relkind='${KIND:-нет объекта}'), TRUNCATE не выполняется"
+        return 0
+    fi
+    # relkind='r' alone is not enough: an inheritance parent is an ordinary table
+    # too, and TRUNCATE without ONLY empties its children as well. Same class of
+    # accident as the partitioned parent, so the same fail-closed treatment.
+    KIDS=$(children_of "${DB}" "${TBL}"); RC=$?
+    if [ ${RC} -ne 0 ] || [ -z "${KIDS}" ]; then
+        echo "ОТКАЗ: ${DB}.${TBL} — проверка наследования не выполнена (psql rc=${RC}), TRUNCATE не выполняется" >&2
+        return 1
+    fi
+    if [ "${KIDS}" != "0" ]; then
+        echo "SKIP: ${DB}.${TBL} — родитель наследования (потомков: ${KIDS}), TRUNCATE не выполняется"
+        return 0
+    fi
+    # Without a name the LIKE below degenerates to "any wraparound autovacuum in
+    # this database" and can return several pids — cancel nothing instead.
+    FQ=$(fqname_of "${DB}" "${TBL}")
+    if [ -n "${FQ}" ]; then
+        WRAP_PID=$(psql ${PGARGS} -d "${DB}" -Atc "select pid from pg_stat_activity
+            where datname = '${DB}'
+              and query like 'autovacuum:%${FQ} (to prevent wraparound)' limit 1")
+        [ -z "${WRAP_PID}" ] || psql ${PGARGS} -d "${DB}" -c "select pg_cancel_backend(${WRAP_PID})"
+    fi
+    psql ${PGARGS} -d "${DB}" -c "SET lock_timeout = '5s'; TRUNCATE ONLY ${TBL}"
+}
+
+# --- retention ----------------------------------------------------------------
+# NOTE (INF-29864): on corezoid-dev the tasks_archive loop was removed from
+# truncate_all by hand, because that shard set is partitioned by pg_partman and
+# retention there is run_maintenance()'s job. The loop is kept HERE on purpose —
+# for the environments whose tasks_archive is still a plain table it IS their
+# retention, and on a partitioned one the guard turns it into a SKIP. So after a
+# playbook run corezoid-dev will again walk tasks_archive and print SKIP ten
+# times; that is expected, not a regression.
+
+# Both loops keep going after a refusal (one unreachable shard must not stop
+# retention on the rest) but report it: cron mails a non-empty exit status, so a
+# permanently failing shard is visible instead of hiding behind rc=0.
+
 truncate_all(){
+    local RC=0
+    require_dbnames || return 1
     for DBNAME in ${DBNAMES}
     do
-        WRAP_PID=$(psql ${PGARGS} -Atc "select pid from pg_stat_activity where datname = '${DBNAME}' and query = 'autovacuum: VACUUM public.tasks_archive (to prevent wraparound)'")
-        [ -z "${WRAP_PID}" ] || { psql ${PGARGS} -c "select pg_cancel_backend(${WRAP_PID})"; }
         echo -n "${DBNAME} "
-        psql ${PGARGS} ${DBNAME} -c "TRUNCATE tasks_archive"
+        truncate_table_guarded "${DBNAME}" tasks_archive || RC=1
     done
     for DBNAME in ${DBNAMES}
     do
-        WRAP_PID=$(psql ${PGARGS} -Atc "select pid from pg_stat_activity where datname = '${DBNAME}' and query = 'autovacuum: VACUUM public.tasks_history (to prevent wraparound)'")
-        [ -z "${WRAP_PID}" ] || { psql ${PGARGS} -c "select pg_cancel_backend(${WRAP_PID})"; }
         echo -n "${DBNAME} "
-        psql ${PGARGS} ${DBNAME} -c "TRUNCATE tasks_history"
+        truncate_table_guarded "${DBNAME}" tasks_history || RC=1
     done
+    return ${RC}
 }
 
 truncate_tasks_history(){
+    local RC=0
+    require_dbnames || return 1
     for DBNAME in ${DBNAMES}
     do
-        WRAP_PID=$(psql ${PGARGS} -Atc "select pid from pg_stat_activity where datname = '${DBNAME}' and query = 'autovacuum: VACUUM public.tasks_history (to prevent wraparound)'")
-        [ -z "${WRAP_PID}" ] || { psql ${PGARGS} -c "select pg_cancel_backend(${WRAP_PID})"; }
         echo -n "${DBNAME} "
-        psql ${PGARGS} ${DBNAME} -c "TRUNCATE tasks_history"
+        truncate_table_guarded "${DBNAME}" tasks_history || RC=1
     done
+    return ${RC}
+}
+
+# --- partman ------------------------------------------------------------------
+# Walks the same ${DBNAMES}; a database without the pg_partman extension is
+# skipped and a failure in one database does not break the loop. Logs to
+# PARTMAN_LOG itself — the case branch below must therefore stay bare.
+
+partman_maintenance(){
+    local DB RC HAS_EXT FAILED
+    FAILED=0
+    if ! require_dbnames; then
+        echo "$(date '+%F %T') ОШИБКА: список баз не получен, maintenance не выполнен" \
+            | tee -a "${PARTMAN_LOG}" >&2
+        return 1
+    fi
+    for DB in ${DBNAMES}; do
+        HAS_EXT=$(psql ${PGARGS} -d "${DB}" -Atc \
+            "SELECT 1 FROM pg_extension WHERE extname='pg_partman'"); RC=$?
+        if [ ${RC} -ne 0 ]; then
+            echo "$(date '+%F %T') ${DB}: ОШИБКА — проверка расширения не выполнена (rc=${RC})" \
+                | tee -a "${PARTMAN_LOG}" >&2
+            FAILED=1
+            continue
+        fi
+        if [ "${HAS_EXT}" != "1" ]; then
+            echo "$(date '+%F %T') ${DB}: pg_partman не установлен, пропуск" | tee -a "${PARTMAN_LOG}"
+            continue
+        fi
+        echo "$(date '+%F %T') ${DB}: run_maintenance" | tee -a "${PARTMAN_LOG}"
+        psql ${PGARGS} -d "${DB}" -c "SELECT partman.run_maintenance()" 2>&1 \
+            | tee -a "${PARTMAN_LOG}"
+        if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "$(date '+%F %T') ${DB}: ОШИБКА run_maintenance" | tee -a "${PARTMAN_LOG}"
+            FAILED=1
+        fi
+    done
+    # cron sends stdout to /dev/null, so a non-zero status is the only thing that
+    # distinguishes "retention ran" from "retention has been failing for a month"
+    return ${FAILED}
 }
 
 check_bloat_tables(){
+    require_dbnames || return 1
     for DBNAME in ${DBNAMES}
     do
         check_exist_pgdb "${DBNAME}"
@@ -63,6 +218,7 @@ check_bloat_tables(){
 repack_shards(){
     local ${TABLE}
     TABLE="$1"
+    require_dbnames || return 1
     for DBNAME in ${DBNAMES}
     do
         check_exist_pgdb "${DBNAME}"
@@ -109,6 +265,9 @@ case "$1" in
     truncate_tasks_history)
         truncate_tasks_history
     ;;
+    partman_maintenance)
+        partman_maintenance
+    ;;
     check_bloat)
         check_bloat_tables
     ;;
@@ -122,5 +281,5 @@ case "$1" in
         top_tables "$2"
     ;;
 	*)
-	echo "Usage: ${0} { truncate_all | truncate_tasks_history |check_bloat | repack_shards | top }"
+	echo "Usage: ${0} { truncate_all | truncate_tasks_history | partman_maintenance | check_bloat | repack_shards | dbsize | top }"
 esac
