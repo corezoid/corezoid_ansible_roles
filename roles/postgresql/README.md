@@ -66,15 +66,6 @@ db_archive_shards:
 db_task_history_shards:
   - { host: "{{ db_main.host }}", user: "{{ db_main.user }}", pass: "{{ db_app_user_pass_enc }}", shards: "{{ real_db_numbers }}" }
 ```
-### Optional Variables
-
-```yaml
-# pg_partman-managed shards (INF-29864). Default: false — omit the variable and
-# the maintenance cron set stays exactly as it has always been.
-# See the "Maintenance" section below for what true changes.
-pg_partman_managed: false
-```
-
 ### Required Variables for box-credential.yml example
 
 ```yaml
@@ -149,104 +140,10 @@ The role configures PgBouncer as a connection pooler with proper authentication 
 
 ## Maintenance
 
-`templates/maintenance.sh.j2` is deployed to `{{ db_dir }}/scripts/maintenance.sh` and scheduled
-via cron. Subcommands: `truncate_all`, `truncate_tasks_history`, `partman_maintenance`,
-`check_bloat`, `repack_shards`, `dbsize`, `top <db>`.
-
-The shard list is asked of the server (`SELECT datname FROM pg_database WHERE datname ~ '${SHARD_PATTERN}'`)
-instead of being assumed by brace expansion, so a shard that does not exist is left out instead of
-producing connection errors. `SHARD_PATTERN` is `^cp[0-9]$` — deliberately the same ten shards the
-script has always cleaned (it used `DBNAMES=$(echo cp{0..9})`). Ten production environments declare
-a hundred shards in `real_db_numbers`; extending a nightly `TRUNCATE` to `cp10`–`cp99` there is a
-per-environment decision, not something to inherit from a template change. Widen the pattern
-consciously, and only for the environment that asked for it.
-
-A single shard can be targeted with `DBNAME=cp3 bash maintenance.sh …`; a name that does not match
-`SHARD_PATTERN` or does not exist is a FATAL. An empty shard list is treated as "list not obtained"
-(server down, wrong port) and the retention functions refuse to run rather than silently doing
-nothing.
-
-**Before the first run on an existing host**, check what the script's paths and port resolve to.
-`SCRIPTS`, `PG_DATA` and the psql port used to be hardcoded (`/var/lib/pgsql/scripts`, port 5433)
-while the script is deployed to `{{ db_dir }}/scripts`; they are now templated from `db_dir` /
-`db_version` / `db_port`. On an environment where those differ from the old hardcoded values the
-retention crons have been failing (bad `cd`, or connecting to a port with no server) and this
-deploy makes them actually run — verify that nightly `TRUNCATE` of `tasks_history` / `tasks_archive`
-is really wanted there before running the role.
-
-### Fail-closed TRUNCATE guard (INF-29864)
-
-Every `TRUNCATE` goes through `truncate_table_guarded()`, which checks `pg_class.relkind` and
-`pg_inherits` before touching anything:
-
-| situation | behaviour |
-| --- | --- |
-| plain table, no children | `TRUNCATE ONLY` as before |
-| partitioned table (`relkind='p'`) | `SKIP`, no `TRUNCATE` |
-| inheritance parent (`relkind='r'` with children) | `SKIP`, no `TRUNCATE` |
-| relation missing | `SKIP` |
-| database unreachable / either check failed | **refusal** (non-zero rc), no `TRUNCATE` |
-
-This matters because `TRUNCATE` on a partitioned parent wipes *all* of its partitions — on a
-pg_partman-managed `tasks_archive` the old unguarded script would have destroyed the whole archive
-on every shard. An inheritance parent needs the same treatment: it is an ordinary table by
-`relkind`, and `TRUNCATE` without `ONLY` empties its children too.
-
-A refusal is not swallowed: `truncate_all` / `truncate_tasks_history` keep going through the
-remaining shards but return non-zero, so cron mails the failure instead of reporting success.
-`TRUNCATE` runs with `lock_timeout = '5s'` — on a busy shard it gives up instead of queueing an
-`ACCESS EXCLUSIVE` lock behind every other query, and the failed run shows up in the same cron mail.
-
-The guard also makes the opt-in disk-usage guard (`disk_truncate_enabled`, which calls
-`truncate_all` at 95% disk) safe on partitioned installs — but consequently ineffective for the
-archive there: it will clean only `tasks_history` and `SKIP` the partitioned `tasks_archive`.
-Reclaiming archive space on a partitioned host is `partman.run_maintenance()`'s retention, not
-this cron's.
-
-`truncate_all` deliberately still walks `tasks_archive`, even though that loop was removed by hand
-on the pg_partman-managed host: on environments whose `tasks_archive` is a plain table that loop
-*is* their retention, and on a partitioned one the guard turns it into a `SKIP`. So after a playbook
-run a partitioned host prints `SKIP` once per shard — expected, not a regression.
-
-### pg_partman mode
-
-`pg_partman_managed: true` (set per environment in `vars/box.yml`; default `false`) switches the
-cron set to the partman layout:
-
-| cron | `pg_partman_managed: false` (default) | `pg_partman_managed: true` |
-| --- | --- | --- |
-| `clean history and archives` (`truncate_all`, `tasks_archive_cron_*`, default 20:00) | present | **absent** (removed by name) |
-| `pg_partman maintenance (INF-29864)` (`partman_maintenance`, 03:00) | **absent** (removed by name) | present |
-| `Clean history` (`truncate_tasks_history`, 21:00) | present | present |
-| `check disk usage and truncate` (`check_disk_truncate.sh`, every 30 min) | opt-in via `disk_truncate_enabled`, not affected by this variable | same |
-
-Both crons are gated by `state:`, not by `when:` — setting the variable back to `false` has to
-*remove* the partman cron, and a skipped task removes nothing.
-
-**Prerequisite:** the role neither installs the `pg_partman` extension nor creates the partition
-set — that is done out of band (see the manual referenced below) and must exist *before* the
-variable is set. Setting it on a host whose `tasks_archive` is not actually partitioned removes the
-only archive retention while `partman_maintenance` logs `pg_partman не установлен, пропуск` for
-every shard: no retention at all. Verify per shard first (`\dx pg_partman`,
-`SELECT * FROM partman.part_config`).
-
-`partman_maintenance` calls `partman.run_maintenance()` per shard, skips databases without the
-`pg_partman` extension, keeps going when one database fails (but returns non-zero if any did), and
-logs to `{{ db_dir }}/scripts/partman_maintenance.log` itself — so its `case` branch stays bare (an
-outer `tee` would double every line). The cron sends stdout to `/dev/null` and stderr to
-`{{ db_dir }}/scripts/partman_maintenance.cron.err`, so the exit status is what makes a permanently
-failing `run_maintenance` visible. Neither log is rotated — watch their size on `{{ db_dir }}`.
-
-With the variable unset, the deployed cron set is what it always was; only the script itself changes
-(guard added, paths/port templated — see the deploy warning in "Maintenance" above). Enabled today
-only on `ff_morocco_dev`, where the `postgresql` role is commented out in `cz-init.yml`: applying it
-there needs a one-off mini-playbook next to `vars/`, a normal `run_playbook.sh` run deploys nothing.
-
-`pg_partman_managed` is intentionally *not* declared in `defaults/main.yml` — the default lives in
-the `| default(false)` filter at each use site in `tasks/install.yml`, so the other ~130
-environments never evaluate a new variable. Partitioning procedure and the reference implementation
-of the guard: §7 of `corezoid-partition-archive.md` in the separate **corezoid_update_manuals**
-repository (branch `inf-29864-partition-tasks-archive-cp1-cp9`), not in this repo.
+Automated maintenance scripts are deployed and scheduled via cron jobs for:
+- Periodic database cleanup
+- Task history truncation
+- Archive cleanup
 
 ## Tags
 
