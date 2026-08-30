@@ -461,6 +461,10 @@
     - postgresql-maintenance-file
 
 # Configure scheduled task for database cleanup
+# On pg_partman-managed installs (pg_partman_managed: true, INF-29864) the
+# tasks_archive retention is done by partman itself, so this cron is removed
+# instead of created. The name must stay the same in both modes — the cron
+# module finds the record to delete by its "#Ansible: <name>" marker.
 - name: Add cron for cleaning DB
   cron:
     name: "clean history and archives"
@@ -470,6 +474,25 @@
     day: "{{ tasks_archive_cron_day }}"
     weekday: "{{ tasks_archive_cron_weekday }}"
     job: "cd {{ db_dir }}/scripts; bash maintenance.sh truncate_all"
+    state: "{{ 'absent' if pg_partman_managed | default(false) | bool else 'present' }}"
+  tags:
+    - postgresql-all
+    - postgresql-maintenance
+    - postgresql-maintenance-cron
+
+# Configure scheduled pg_partman maintenance (partition create/detach/drop).
+# Opt-in: only on installs where tasks_archive is partitioned by pg_partman.
+# Gated by state=, not by when=, for the same reason as the cron above: turning
+# the variable back off has to REMOVE the cron, and a skipped task removes
+# nothing — the host would keep both retention crons.
+- name: Add cron for pg_partman maintenance
+  cron:
+    name: "pg_partman maintenance (INF-29864)"
+    user: postgres
+    minute: 0
+    hour: 3
+    job: "cd {{ db_dir }}/scripts && bash maintenance.sh partman_maintenance >/dev/null 2>>{{ db_dir }}/scripts/partman_maintenance.cron.err"
+    state: "{{ 'present' if pg_partman_managed | default(false) | bool else 'absent' }}"
   tags:
     - postgresql-all
     - postgresql-maintenance
