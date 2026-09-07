@@ -187,3 +187,26 @@
   tags:
     - pgsql-all
     - pgsql-alter-table-corezoid_counters
+
+# 6.13.0+: cp.sql creates the task-store v3 write-path functions as postgres. Without transferring
+# ownership to the app user, capi/worker's own boot-time self-deploy (CREATE OR REPLACE FUNCTION,
+# running as db_main.user) fails with "42501 must be owner of function" on every restart — harmless
+# (functions already exist correctly) but permanent log noise. Mirrors the corezoid_counters pattern
+# above. IF NOT EXISTS-safe: only runs when the function is actually present (post-6.13.0 schema).
+- name: Change ownership of task-store v3 functions on shard databases
+  become: yes
+  become_user: postgres
+  shell: |
+    psql -p {{ db_main.port }} postgres -U postgres -d {{ local_db }} -v ON_ERROR_STOP=0 <<EOF
+    ALTER FUNCTION public.ts_change_v3 OWNER TO {{ db_main.user }};
+    ALTER FUNCTION public.ts_delete_v3 OWNER TO {{ db_main.user }};
+    ALTER FUNCTION public.ts_insert_inline_v3 OWNER TO {{ db_main.user }};
+    ALTER FUNCTION public.ts_insert_v3 OWNER TO {{ db_main.user }};
+    ALTER FUNCTION public.ts_lock_v3 OWNER TO {{ db_main.user }};
+    EOF
+  when:
+    - local_db | regex_replace('[0-9]+$', '') == 'cp'
+    - corezoid_release is version('6.13.0', '>=')
+  tags:
+    - pgsql-all
+    - pgsql-alter-function-task-store-v3
