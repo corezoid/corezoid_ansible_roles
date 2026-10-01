@@ -72,12 +72,6 @@
     - worker-all
     - worker-start
 
-# Open worker ports in firewalld (no-op when firewalld is not running)
-- import_tasks: firewalld.yml
-  tags:
-    - worker-all
-    - worker-firewalld
-
 # Create Monit monitoring configuration
 # Sets up monitoring for the Worker service
 - name: Create monit file
