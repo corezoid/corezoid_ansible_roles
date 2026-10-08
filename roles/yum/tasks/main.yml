@@ -14,7 +14,7 @@
       System Information:
       ==================
       Hostname: {{ ansible_hostname }}
-      IP: {{ ansible_default_ipv4.address }}
+      IP: {{ ansible_default_ipv4.address | default('n/a') }}
       CPU count: {{ ansible_processor_vcpus }}
       Total memory: {{ ansible_memtotal_mb }} MB
 
@@ -29,6 +29,36 @@
     - yum-debug
     - getdist
 
+# ---------------------------------------------------------------------------
+# Corezoid repo prefix: derive from facts when the play does not pass one.
+# Existing plays that set yum_s3_bucket_prefix explicitly are unaffected.
+# ---------------------------------------------------------------------------
+- name: Derive default repo prefix from OS facts
+  ansible.builtin.set_fact:
+    yum_s3_bucket_prefix: >-
+      {%- if ansible_distribution == 'Amazon' -%}
+      {{ corezoid_release }}/amazon{{ ansible_distribution_major_version }}/{{ 'arm64' if ansible_architecture == 'aarch64' else 'latest' }}
+      {%- else -%}
+      {{ corezoid_release }}/redhat/{{ ansible_distribution_major_version }}
+      {%- endif -%}
+  when:
+    - ansible_os_family == "RedHat"
+    - yum_s3_bucket_prefix is not defined
+  tags:
+    - yum-all
+    - yum-corezoid-repo
+
+- name: Show Corezoid repo path
+  ansible.builtin.debug:
+    msg: "aws-corezoid -> {{ corezoid_repo_baseurl | default('https://' ~ (corezoid_repo_domain | default('repo.middleware.biz')) ~ '/' ~ (yum_s3_bucket | default('corezoid')) ~ '/' ~ yum_s3_bucket_prefix) }}"
+  when: ansible_os_family == "RedHat"
+  tags:
+    - yum-all
+    - yum-corezoid-repo
+
+# ---------------------------------------------------------------------------
+# EPEL (+ CRB) per distribution. Needed by roles/system base packages.
+# ---------------------------------------------------------------------------
 - name: Enable exta repos for Amazon linux 2
   block:
     - name: enable epel
@@ -39,27 +69,111 @@
         state: latest
         update_cache: yes
       notify: yum-clean-metadata
-  when: ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
+  when:
+    - yum_enable_epel | bool
+    - ansible_distribution == "Amazon" and ansible_distribution_major_version == "2"
   tags:
    - yum-all
    - yum-epel-repo-install
 
-# EPEL on CentOS/Rocky/Alma EL8/EL9 — provides atop, iftop, iotop (not in base/appstream).
-# epel-release ships in the distro 'extras' repo, so a plain package install is enough.
-# OracleLinux uses oracle-epel-release-elN (handled in the system role); RHEL proper needs
-# the fedoraproject rpm + CRB and is intentionally out of scope here.
-- name: Enable EPEL on RHEL-family EL8/EL9 (CentOS/Rocky/Alma)
+# CentOS Stream / Rocky / AlmaLinux: epel-release ships in the distro 'extras' repo.
+- name: Enable EPEL on CentOS/Rocky/Alma EL8/EL9
   ansible.builtin.dnf:
     name: epel-release
     state: present
     update_cache: yes
   when:
+    - yum_enable_epel | bool
     - ansible_distribution in ['CentOS', 'Rocky', 'AlmaLinux']
     - ansible_distribution_major_version in ['8', '9']
   tags:
     - yum-all
     - yum-epel-repo-install
 
+- name: Enable CRB repo on CentOS/Rocky/Alma EL8/EL9 (EPEL dependencies)
+  ansible.builtin.command: "dnf config-manager --set-enabled {{ 'crb' if ansible_distribution_major_version == '9' else 'powertools' }}"
+  register: yum_crb_result
+  changed_when: "'enabled' not in (yum_crb_result.stdout | lower)"
+  failed_when: false
+  when:
+    - yum_enable_epel | bool
+    - ansible_distribution in ['CentOS', 'Rocky', 'AlmaLinux']
+    - ansible_distribution_major_version in ['8', '9']
+  tags:
+    - yum-all
+    - yum-epel-repo-install
+
+# Oracle Linux ships its own EPEL mirror package (was in roles/system; moved here so
+# every play that has role: yum gets it, app plays included).
+- name: Enable EPEL on Oracle Linux EL8/EL9
+  ansible.builtin.dnf:
+    name: "oracle-epel-release-el{{ ansible_distribution_major_version }}"
+    state: present
+    update_cache: yes
+  when:
+    - yum_enable_epel | bool
+    - ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version in ['8', '9']
+  tags:
+    - yum-all
+    - yum-epel-repo-install
+
+- name: Enable CodeReady Builder on Oracle Linux EL8/EL9
+  ansible.builtin.command: "dnf config-manager --set-enabled ol{{ ansible_distribution_major_version }}_codeready_builder"
+  register: yum_ol_crb_result
+  changed_when: false
+  failed_when: false
+  when:
+    - yum_enable_epel | bool
+    - ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version in ['8', '9']
+  tags:
+    - yum-all
+    - yum-epel-repo-install
+
+# RHEL proper: EPEL comes from fedoraproject, CRB from the subscription.
+- name: Enable EPEL on RHEL EL8/EL9
+  ansible.builtin.dnf:
+    name: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ ansible_distribution_major_version }}.noarch.rpm"
+    state: present
+    disable_gpg_check: yes
+  when:
+    - yum_enable_epel | bool
+    - ansible_distribution == "RedHat"
+    - ansible_distribution_major_version in ['8', '9']
+  tags:
+    - yum-all
+    - yum-epel-repo-install
+
+- name: Enable CodeReady Builder on RHEL EL8/EL9 (needs an active subscription)
+  ansible.builtin.command: "subscription-manager repos --enable codeready-builder-for-rhel-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}-rpms"
+  register: yum_rhel_crb_result
+  changed_when: "'enabled' in (yum_rhel_crb_result.stdout | lower)"
+  failed_when:
+    - yum_rhel_crb_result.rc != 0
+    - yum_rhel_crb_fail_fatal | bool
+  when:
+    - yum_enable_epel | bool
+    - ansible_distribution == "RedHat"
+    - ansible_distribution_major_version in ['8', '9']
+  tags:
+    - yum-all
+    - yum-epel-repo-install
+
+- name: Warn when CRB could not be enabled on RHEL
+  ansible.builtin.debug:
+    msg: "CRB (codeready-builder) not enabled on {{ inventory_hostname }}: {{ yum_rhel_crb_result.stderr | default(yum_rhel_crb_result.stdout) | default('') | trim }}. EPEL packages that depend on CRB (few) will not install; register the host or enable CRB manually."
+  when:
+    - yum_rhel_crb_result is defined
+    - yum_rhel_crb_result is not skipped
+    - yum_rhel_crb_result.rc | default(0) != 0
+  tags:
+    - yum-all
+    - yum-epel-repo-install
+
+# ---------------------------------------------------------------------------
+# Corezoid repository
+# ---------------------------------------------------------------------------
 - name: Add Corezoid Repo
   template:
     src: "templates/corezoid-Amazon-aws.repo.j2"
@@ -71,6 +185,40 @@
   tags:
     - yum-all
     - yum-corezoid-repo
+
+- name: Import Corezoid repository GPG key
+  ansible.builtin.rpm_key:
+    key: "{{ corezoid_repo_gpgkey }}"
+    state: present
+  when:
+    - ansible_os_family == "RedHat"
+    - corezoid_repo_domain is not defined
+    - corezoid_release is version('5.3', '>=')
+  tags:
+    - yum-all
+    - yum-corezoid-repo
+
+# EL9 hosts reject RSA/SHA1 package signatures under the DEFAULT/FUTURE crypto
+# policy. Check the repository signature once, here, with a readable message.
+- name: EL9 package-signature preflight
+  ansible.builtin.include_tasks:
+    file: preflight_el9.yml
+    apply:
+      tags:
+        - yum-all
+        - yum-corezoid-repo
+        - yum-preflight
+  when:
+    - corezoid_repo_preflight | bool
+    - ansible_os_family == "RedHat"
+    - ansible_distribution != "Amazon"
+    - ansible_distribution_major_version is version('9', '>=')
+    - corezoid_repo_domain is not defined
+    - corezoid_release is version('5.3', '>=')
+  tags:
+    - yum-all
+    - yum-corezoid-repo
+    - yum-preflight
 
 # Debian/Ubuntu: the Corezoid bucket is RPM-only (redhat/<major>), there is no .deb repo.
 # On this family the role degrades to an apt-cache/universe preflight. It runs FIRST
