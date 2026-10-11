@@ -73,18 +73,6 @@ db_task_history_shards:
 # the maintenance cron set stays exactly as it has always been.
 # See the "Maintenance" section below for what true changes.
 pg_partman_managed: false
-
-# Retention scope of maintenance.sh (INF-30670). Default: '^cp[0-9]$' = cp0–cp9, exactly what
-# the script has always cleaned. Widen it only for the environment that asked for it; the
-# list is taken from pg_database on each host, so '^cp[0-9]+$' on a master that holds
-# cp25–cp49 resolves to those 25 and nothing else.
-maintenance_shard_pattern: '^cp[0-9]$'
-
-# Emergency disk-usage guard (check_disk_truncate.sh, every 30 min): runs truncate_all when
-# the data filesystem reaches the threshold. Default: off.
-disk_truncate_enabled: false
-disk_truncate_mount_point: "{{ db_dir }}"
-disk_truncate_threshold: 95
 ```
 
 ### Required Variables for box-credential.yml example
@@ -167,17 +155,11 @@ via cron. Subcommands: `truncate_all`, `truncate_tasks_history`, `partman_mainte
 
 The shard list is asked of the server (`SELECT datname FROM pg_database WHERE datname ~ '${SHARD_PATTERN}'`)
 instead of being assumed by brace expansion, so a shard that does not exist is left out instead of
-producing connection errors. `SHARD_PATTERN` is rendered from `maintenance_shard_pattern`
-(INF-30670); its default `^cp[0-9]$` is deliberately the same ten shards the script has always
-cleaned (it used `DBNAMES=$(echo cp{0..9})`). Ten production environments declare a hundred shards
-in `real_db_numbers`; extending a nightly `TRUNCATE` to `cp10`–`cp99` there is a per-environment
-decision, not something to inherit from a template change. Widen the pattern consciously, in that
-environment's `vars/box.yml`, and only for the environment that asked for it — `leobank_prod_new`
-(25 shards per master) sets `'^cp[0-9]+$'`, which on each master resolves to exactly its own 25
-databases because the list comes from that host's `pg_database`.
-
-`check_bloat` is read-only and therefore ignores `SHARD_PATTERN`: it always walks every `cp[0-9]+`
-database (INF-30500); `DBNAME=cpN` still narrows it to one shard.
+producing connection errors. `SHARD_PATTERN` is `^cp[0-9]$` — deliberately the same ten shards the
+script has always cleaned (it used `DBNAMES=$(echo cp{0..9})`). Ten production environments declare
+a hundred shards in `real_db_numbers`; extending a nightly `TRUNCATE` to `cp10`–`cp99` there is a
+per-environment decision, not something to inherit from a template change. Widen the pattern
+consciously, and only for the environment that asked for it.
 
 A single shard can be targeted with `DBNAME=cp3 bash maintenance.sh …`; a name that does not match
 `SHARD_PATTERN` or does not exist is a FATAL. An empty shard list is treated as "list not obtained"
@@ -225,35 +207,6 @@ this cron's.
 on the pg_partman-managed host: on environments whose `tasks_archive` is a plain table that loop
 *is* their retention, and on a partitioned one the guard turns it into a `SKIP`. So after a playbook
 run a partitioned host prints `SKIP` once per shard — expected, not a regression.
-
-### Standbys
-
-The role deploys the script and the crons on streaming standbys as well (`leobank_prod_new` runs it
-on all 8 shard hosts), so a promoted standby has working retention without a playbook run. In
-recovery, `truncate_all`, `truncate_tasks_history`, `partman_maintenance` and `repack_shards` print
-`standby (pg_is_in_recovery = t): … пропущен` and exit 0 — nothing to mail. Only a literal `t` is a
-standby: with the server down the check falls through to `require_dbnames`, which refuses as before.
-`check_bloat` runs on a standby (that is where it is meant to run — it reads the whole table).
-
-### repack_shards (INF-30670)
-
-`repack_shards` is the variant that has been running by hand on UZ prod `db-cz-shards-1`:
-
-- *any* autovacuum on the table or its toast is cancelled first (not only the anti-wraparound one);
-  the match is `% public.tasks` / `% public.tasks %`, so `tasks_archive` autovacuums are left alone;
-- `autovacuum_enabled` is set to `false` on the table for the duration and `RESET` afterwards —
-  also when `pg_repack` fails and on `INT`/`TERM` — so a repack never leaves a shard without
-  autovacuum;
-- `pg_repack … --no-kill-backend --wait-timeout=120`: on a lock timeout it gives up instead of
-  terminating the application's backends;
-- a database without the `pg_repack` extension, or a missing table, is a refusal (non-zero, nothing
-  touched); the first failed shard stops the run — a half-repacked tier is something to look at,
-  not to skip. The role installs the `pg_repack_<ver>` package, **not** the extension —
-  `CREATE EXTENSION pg_repack` per shard is out of band.
-
-Like retention it walks `SHARD_PATTERN` / `DBNAME`; run it on the master only (a standby is a
-no-op, see above). The UZ-only wrappers `repack_shards_ordered.sh` / `clean_sc_ctid.sh` are not
-part of the role.
 
 ### pg_partman mode
 

@@ -18,18 +18,14 @@ PARTMAN_LOG="${SCRIPTS}/partman_maintenance.log"
 
 cd ${SCRIPTS} || exit 1
 
-# Retention scope. The default is deliberately the same ten shards the previous
-# revision of this script used (`DBNAMES=$(echo cp{0..9})`): ten production
-# environments declare a hundred shards in real_db_numbers (ff_kyrgyztan_prod*,
-# ff_morocco_prod, ff_nigeria_prod, ff_vietnam_prod, corezoid.com, jusan-prod,
-# ff_india_prod*…), and widening a nightly TRUNCATE to cp10–cp99 there is a
-# per-environment decision, not a side effect of a template change. An environment
-# that wants it sets `maintenance_shard_pattern` in its vars/box.yml (INF-30670:
-# leobank_prod_new runs 25 shards per master, '^cp[0-9]+$' there resolves to exactly
-# that master's cp0–cp24 / cp25–cp49 / … because the list is asked of pg_database).
-# Single source for all three places the pattern is used: this query, the DBNAME
-# override and its FATAL text.
-SHARD_PATTERN='{{ maintenance_shard_pattern | default("^cp[0-9]$") }}'
+# Retention scope. Deliberately the same ten shards the previous revision of this
+# script used (`DBNAMES=$(echo cp{0..9})`): ten production environments declare a
+# hundred shards in real_db_numbers (ff_kyrgyztan_prod*, ff_morocco_prod,
+# ff_nigeria_prod, ff_vietnam_prod, corezoid.com, jusan-prod, ff_india_prod*…),
+# and widening a nightly TRUNCATE to cp10–cp99 there is a separate per-environment
+# decision, not a side effect of INF-29864. Single source for all three places the
+# pattern is used: this query, the DBNAME override and its FATAL text.
+SHARD_PATTERN='^cp[0-9]$'
 
 # Asked of the server instead of assumed, so a shard that does not exist is left
 # out instead of producing connection errors.
@@ -59,22 +55,6 @@ fi
 # not "nothing to do" — refuse rather than run a silent no-op.
 require_dbnames(){
     [ -n "${DBNAMES}" ] || { echo "ОТКАЗ: список баз cp[0-9]+ пуст или не получен" >&2; return 1; }
-}
-
-# The role deploys the script and its crons on streaming standbys too (so a promoted
-# standby has working retention without a playbook run). TRUNCATE / pg_repack /
-# run_maintenance cannot run in recovery — each would fail and cron would mail the
-# failure every night — so the writing subcommands print one line and exit 0 there.
-# Only an explicit 't' is a standby: with the server down the check is false and the
-# caller falls through to require_dbnames, which refuses as before.
-skip_on_standby(){
-    local IN_RECOVERY
-    IN_RECOVERY=$(psql ${PGARGS} -d postgres -Atc "SELECT pg_is_in_recovery()" 2>/dev/null)
-    if [ "${IN_RECOVERY}" = "t" ]; then
-        echo "standby (pg_is_in_recovery = t): $1 пропущен, выполняется только на мастере"
-        return 0
-    fi
-    return 1
 }
 
 check_exist_pgdb(){
@@ -157,7 +137,6 @@ truncate_table_guarded(){
 
 truncate_all(){
     local RC=0
-    skip_on_standby truncate_all && return 0
     require_dbnames || return 1
     for DBNAME in ${DBNAMES}
     do
@@ -174,7 +153,6 @@ truncate_all(){
 
 truncate_tasks_history(){
     local RC=0
-    skip_on_standby truncate_tasks_history && return 0
     require_dbnames || return 1
     for DBNAME in ${DBNAMES}
     do
@@ -192,7 +170,6 @@ truncate_tasks_history(){
 partman_maintenance(){
     local DB RC HAS_EXT FAILED
     FAILED=0
-    skip_on_standby partman_maintenance && return 0
     if ! require_dbnames; then
         echo "$(date '+%F %T') ОШИБКА: список баз не получен, maintenance не выполнен" \
             | tee -a "${PARTMAN_LOG}" >&2
@@ -224,107 +201,33 @@ partman_maintenance(){
     return ${FAILED}
 }
 
-# Read-only, so unlike retention it covers every shard (cp0–cp99), not SHARD_PATTERN;
-# DBNAME=cpN still narrows it to one shard (INF-30500).
-# pgstattuple_approx skips all-visible pages instead of reading the whole table:
-# a full pgstattuple('tasks') on a standby outlives max_standby_streaming_delay and
-# gets cancelled ("conflict with recovery"), so a cancelled shard is retried.
 check_bloat_tables(){
-    local BLOAT_DBNAMES TABLE RES TRY
-    TABLE="tasks"
-    if [ -n "${DBNAME:-}" ]; then
-        BLOAT_DBNAMES="${DBNAMES}"
-    else
-        BLOAT_DBNAMES=$(psql ${PGARGS} -d postgres -Atc \
-            "SELECT datname FROM pg_database WHERE datname ~ '^cp[0-9]+$' ORDER BY length(datname), datname")
-    fi
-    [ -n "${BLOAT_DBNAMES}" ] || { echo "ОТКАЗ: список баз cp[0-9]+ пуст или не получен" >&2; return 1; }
-    for DB in ${BLOAT_DBNAMES}
+    require_dbnames || return 1
+    for DBNAME in ${DBNAMES}
     do
-        check_exist_pgdb "${DB}"
-        if [ "$(psql ${PGARGS} -d "${DB}" -Atc "SELECT 1 FROM pg_extension WHERE extname = 'pgstattuple'")" != "1" ]; then
-            echo "${DB}|${TABLE}|SKIP: нет pgstattuple (CREATE EXTENSION pgstattuple на мастере)"
-            continue
-        fi
-        for TRY in 1 2 3
+        check_exist_pgdb "${DBNAME}"
+        #TABLES=$(psql ${PGARGS} ${DBNAME} -Atc "SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        TABLES="tasks"
+        for TABLE in ${TABLES}
         do
-            RES=$(psql ${PGARGS} -d "${DB}" -Atc \
-                "SELECT round(approx_free_percent::numeric, 2) FROM pgstattuple_approx('${TABLE}')" 2>&1) && break
-            [ ${TRY} -lt 3 ] && sleep 5
+            echo "${DBNAME}|${TABLE}|$(psql ${PGARGS} ${DBNAME} -Atc "SELECT free_percent FROM pgstattuple('${TABLE}')")"
         done
-        [[ "${RES}" =~ ^[0-9.]+$ ]] || RES="ERROR: $(echo "${RES}" | head -1)"
-        echo "${DB}|${TABLE}|${RES}"
     done
 }
 
-# --- repack -------------------------------------------------------------------
-# Ported from the hand-maintained copy on UZ prod db-cz-shards-1 (INF-30670), where
-# it has been running against live shards:
-#  * ANY autovacuum on the table or its toast is cancelled (not only the anti-wraparound
-#    one) — pg_repack needs an ACCESS SHARE-free moment to swap and a running autovacuum
-#    holds it off until --wait-timeout expires;
-#  * autovacuum_enabled is switched off on the table for the duration and RESET
-#    afterwards — also on failure and on INT/TERM — so a repack never leaves a shard
-#    without autovacuum;
-#  * --no-kill-backend: on a timeout pg_repack gives up instead of terminating the
-#    application's backends; --wait-timeout=120 as on UZ.
-# Walks ${DBNAMES} (SHARD_PATTERN / DBNAME override) like retention does, and stops at
-# the first failed shard: a half-repacked tier is something to look at, not to skip.
-
-repack_av_reset(){
-    psql ${PGARGS} -d "$1" -c "ALTER TABLE $2 RESET (autovacuum_enabled);"
-}
-
 repack_shards(){
-    local TABLE FQ TOAST AV_PIDS AVPID REPACK_STATUS HAS_EXT
+    local ${TABLE}
     TABLE="$1"
-    skip_on_standby repack_shards && return 0
     require_dbnames || return 1
     for DBNAME in ${DBNAMES}
     do
         check_exist_pgdb "${DBNAME}"
 
-        # pg_repack needs its extension in the database (CREATE EXTENSION pg_repack, out of band)
-        HAS_EXT=$(psql ${PGARGS} -d "${DBNAME}" -Atc "SELECT 1 FROM pg_extension WHERE extname = 'pg_repack'")
-        if [ "${HAS_EXT}" != "1" ]; then
-            echo "ОТКАЗ: ${DBNAME} — расширение pg_repack не установлено (CREATE EXTENSION pg_repack), repack не выполняется" >&2
-            return 1
-        fi
+        WRAP_PID=$(psql ${PGARGS} -Atc "select pid from pg_stat_activity where datname = '${DBNAME}' and query = 'autovacuum: VACUUM public.tasks (to prevent wraparound)'")
+        [ -z "${WRAP_PID}" ] || { psql ${PGARGS} -c "select pg_cancel_backend(${WRAP_PID})"; }
 
-        FQ=$(fqname_of "${DBNAME}" "${TABLE}")
-        if [ -z "${FQ}" ]; then
-            echo "ОТКАЗ: ${DBNAME}.${TABLE} — таблица не найдена, repack не выполняется" >&2
-            return 1
-        fi
-        # toast relation, schema-qualified as autovacuum names it ("pg_toast.pg_toast_16385"); empty if none
-        TOAST=$(psql ${PGARGS} -d "${DBNAME}" -Atc \
-            "SELECT reltoastrelid::regclass::text FROM pg_class WHERE oid = to_regclass('${TABLE}') AND reltoastrelid <> 0")
-
-        # cancel ANY autovacuum currently touching this table or its toast (not just anti-wraparound);
-        # "% name" / "% name %" rather than "%name%", so public.tasks does not also hit public.tasks_archive
-        AV_PIDS=$(psql ${PGARGS} -d "${DBNAME}" -Atc "SELECT pid FROM pg_stat_activity
-            WHERE datname = '${DBNAME}' AND query LIKE 'autovacuum:%'
-              AND (query LIKE '% ${FQ}' OR query LIKE '% ${FQ} %'
-                   OR ('${TOAST}' <> '' AND (query LIKE '% ${TOAST}' OR query LIKE '% ${TOAST} %')))")
-        for AVPID in ${AV_PIDS}; do
-            echo "Cancelling autovacuum pid ${AVPID} on ${DBNAME}.${TABLE}"
-            psql ${PGARGS} -d "${DBNAME}" -c "SELECT pg_cancel_backend(${AVPID})"
-        done
-
-        echo "Disabling autovacuum on ${TABLE} in ${DBNAME} for the duration of repack"
-        psql ${PGARGS} -d "${DBNAME}" -c "ALTER TABLE ${TABLE} SET (autovacuum_enabled = false);" || return 1
-        # shellcheck disable=SC2064  # expand now on purpose: the handler must name THIS shard
-        trap "repack_av_reset '${DBNAME}' '${TABLE}'; exit 130" INT TERM
-
-        echo "Running pg_repack for ${TABLE} in ${DBNAME}"
-        pg_repack ${PGARGS2} -d "${DBNAME}" --table "${TABLE}" --no-kill-backend --wait-timeout=120
-        REPACK_STATUS=$?
-
-        trap - INT TERM
-        echo "Re-enabling autovacuum on ${TABLE} in ${DBNAME}"
-        repack_av_reset "${DBNAME}" "${TABLE}"
-
-        [ ${REPACK_STATUS} -eq 0 ] || { echo "ОШИБКА: pg_repack ${DBNAME}.${TABLE} rc=${REPACK_STATUS}, остальные шарды не обработаны" >&2; return 1; }
+        echo "Running pg_repack for tasks in ${DBNAME}"
+        pg_repack ${PGARGS2} -d ${DBNAME} --table ${TABLE} || exit 1
     done
 }
 

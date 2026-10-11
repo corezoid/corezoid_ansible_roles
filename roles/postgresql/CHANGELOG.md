@@ -17,11 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Encrypted passwords for database users
 - PgBouncer configuration with secure authentication
 
-## [Unreleased] - 2026-10-08
-
-### Fixed
-- Rocky Linux / AlmaLinux 8 and 9 (and any RHEL-family flavour) now take the RHEL code paths: PGDG repo for EL9, module disable for EL8, psycopg2 package selection, pgbouncer EL version and systemd limits. Conditions use `ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'` instead of explicit CentOS/RedHat/OracleLinux lists
-
 ## [1.0.0] - 2025-02-26
 
 ### Added
@@ -49,23 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pg_pglogical_15
   pglogical_llvmjit_15
   ```
-
-## [1.4.0] - 2026-10-07
-### Added
-- `maintenance_shard_pattern` (default `'^cp[0-9]$'`, unchanged behaviour): the retention scope of
-  `maintenance.sh` is now a variable rendered into `SHARD_PATTERN`; `leobank_prod_new` sets
-  `'^cp[0-9]+$'` for its 25-shards-per-master layout (INF-30670)
-- `maintenance.sh`: the writing subcommands (`truncate_all`, `truncate_tasks_history`,
-  `partman_maintenance`, `repack_shards`) are a no-op with exit 0 on a streaming standby
-  (`pg_is_in_recovery()`), so the crons can be deployed on standbys for failover readiness
-- `maintenance.sh check_bloat`: `pgstattuple_approx` instead of a full scan, retry on recovery
-  conflict, walks every `cp[0-9]+` database regardless of `SHARD_PATTERN` (INF-30500)
-
-### Changed
-- `maintenance.sh repack_shards`: ported from the UZ prod copy — cancels any autovacuum on the
-  table and its toast, sets `autovacuum_enabled=false` for the duration and `RESET`s it afterwards
-  (also on failure / INT / TERM), `pg_repack --no-kill-backend --wait-timeout=120`, refuses on a
-  missing `pg_repack` extension or table, stops at the first failed shard (INF-30670)
 
 ## [1.3.0] - 2026-08-24
 ### Security

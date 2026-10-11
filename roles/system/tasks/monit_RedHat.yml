@@ -11,14 +11,13 @@
         'RedHat-7-x86_64': 'monit-5.25.1-1.el7.x86_64.rpm',
         'RedHat-8-x86_64': 'monit-5.33.0-1.el8.x86_64.rpm',
         'RedHat-9-x86_64': 'monit-5.33.0-1.el9.x86_64.rpm',
-        'RedHat-9-aarch64': 'monit-5.33.0-1.el9.aarch64.rpm',
         'OracleLinux-7-x86_64': 'monit-5.25.1-1.el7.x86_64.rpm',
         'OracleLinux-8-x86_64': 'monit-5.33.0-1.el8.x86_64.rpm',
         'OracleLinux-9-x86_64': 'monit-5.33.0-1.el9.x86_64.rpm',
         'Amazon-2023-x86_64': 'monit-5.33.0-1.el9.x86_64.rpm',
         'Amazon-2023-aarch64': 'monit-5.33.0-1.el9.aarch64.rpm',
         'Amazon-2-x86_64': 'monit-5.25.1-1.el7.x86_64.rpm'
-      }[(ansible_distribution if ansible_distribution == 'Amazon' else 'RedHat') ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
+      }[ansible_distribution ~ '-' ~ ansible_distribution_major_version ~ '-' ~ ansible_architecture] }}
 
 - name: Copy redis Packages for {{ ansible_distribution }}-{{ ansible_distribution_major_version }}-{{ ansible_architecture }}
   copy:
