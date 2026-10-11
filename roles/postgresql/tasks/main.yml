@@ -59,7 +59,7 @@
   set_fact:
     psycopg2_rpm: "python-psycopg2"
   when:
-    - ansible_distribution == 'RedHat' or ansible_distribution == 'CentOS' or ansible_distribution == "OracleLinux"
+    - ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'
     - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "9"
   tags:
     - pgsql-all
@@ -70,7 +70,7 @@
   set_fact:
     psycopg2_rpm: "python3-psycopg2"
   when:
-    - ansible_distribution == 'RedHat' or ansible_distribution == 'CentOS' or ansible_distribution == "OracleLinux"
+    - ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'
     - ansible_distribution_major_version == "8"
   tags:
     - pgsql-all

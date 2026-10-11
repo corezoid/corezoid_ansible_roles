@@ -52,15 +52,21 @@
     - elasticsearch-all
     - elasticsearch-install
   when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
-    - ansible_distribution_major_version == "7" or ansible_distribution_major_version == "9" or ansible_distribution_major_version == "8"
+    - ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'
+    - ansible_distribution_major_version in ["7", "8", "9"]
 
-# Configure crypto policies for CentOS 9
-# Updates crypto policies to support required algorithms
-- name: update-crypto-policies elasticsearch Centos 9
+# Crypto policy DEFAULT:SHA1 on EL9.
+# Historically added here; its real effect was to let the SHA1-signed Corezoid RPMs install
+# on hosts where this role ran before the app roles. Package signing is moving to SHA256
+# (corezoid_build_all/rpm-sign, os-matrix/sign-sha256) and roles/yum now has an explicit,
+# documented override (corezoid_allow_sha1_policy). This task is therefore opt-in:
+# elasticsearch_set_sha1_policy defaults to false. Set it to true only if an EL9 host
+# still needs SHA1 for the Elasticsearch repository itself.
+- name: update-crypto-policies DEFAULT:SHA1 on EL9 (opt-in, elasticsearch_set_sha1_policy)
   shell: update-crypto-policies --set DEFAULT:SHA1
   when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - elasticsearch_set_sha1_policy | default(false) | bool
+    - ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'
     - ansible_distribution_major_version == "9"
 
 # Install Elasticsearch package

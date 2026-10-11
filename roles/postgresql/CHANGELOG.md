@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Encrypted passwords for database users
 - PgBouncer configuration with secure authentication
 
+## [Unreleased] - 2026-10-08
+
+### Fixed
+- Rocky Linux / AlmaLinux 8 and 9 (and any RHEL-family flavour) now take the RHEL code paths: PGDG repo for EL9, module disable for EL8, psycopg2 package selection, pgbouncer EL version and systemd limits. Conditions use `ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'` instead of explicit CentOS/RedHat/OracleLinux lists
+
 ## [1.0.0] - 2025-02-26
 
 ### Added

@@ -47,7 +47,7 @@
     gpgcheck: no
     enabled: yes
   when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'
     - ansible_distribution_major_version == "9"
 
 # Disable built-in PostgreSQL module on RHEL/CentOS/OracleLinux 8 
@@ -57,7 +57,7 @@
     warn: false
   when:
     - pgdg15 is defined or pgdg13 is defined
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'
     - ansible_distribution_major_version == "8"
   tags:
     - yum-all
