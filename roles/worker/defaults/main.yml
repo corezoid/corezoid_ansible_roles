@@ -8,16 +8,6 @@ worker_prometheus_port: 9101
 worker_cluster_port: 5567
 worker_interconnect_port: 5555
 
-# firewalld (tasks/firewalld.yml): применяется только если firewalld запущен.
-# 4369 — epmd, worker_cluster_port — inet_dist_listen_min/max (Erlang-дистрибуция между
-# воркерами), worker_is_ready_port — health-endpoint is_ready ({port, 8380} в шаблонах).
-worker_is_ready_port: 8380
-worker_firewalld_source: "{{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.prefix }}"
-worker_firewalld_ports:
-  - 4369
-  - "{{ worker_cluster_port }}"
-  - "{{ worker_is_ready_port }}"
-
 worker_max_task_size: 262144
 timer_auto_init: "true"
 

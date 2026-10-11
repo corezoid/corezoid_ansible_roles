@@ -70,6 +70,7 @@
     state: started
   tags:
     - api-multipart-all
+    - api-multipart-start
 
 # Create Monit monitoring configuration
 # Sets up monitoring for the application using Monit
@@ -98,3 +99,5 @@
     - capi-all
     - capi-app
     - capi-monit
+    - api-multipart-all
+    - api-multipart-monit
