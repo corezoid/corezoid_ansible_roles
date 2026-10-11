@@ -1,2 +1,40 @@
 ---
 # defaults file for yum
+
+# Corezoid package repository ------------------------------------------------
+# S3 bucket (served at https://repo.middleware.biz/<bucket>/...) and the path
+# prefix inside it. When yum_s3_bucket_prefix is NOT set by the play, the role
+# derives it from facts (see tasks/main.yml "Derive default repo prefix"):
+#   RHEL / CentOS / OracleLinux / Rocky / AlmaLinux  ->  <release>/redhat/<major>
+#   Amazon Linux 2                                   ->  <release>/amazon2/{latest|arm64}
+#   Amazon Linux 2023                                ->  <release>/amazon2023/{latest|arm64}
+# Plays that still pass an explicit prefix keep working unchanged.
+yum_s3_bucket: "corezoid"
+# yum_s3_bucket_prefix: "{{ corezoid_release }}/redhat/9"   # explicit override
+# Full baseurl override (e.g. a signed private mirror); keeps gpgcheck=1 unlike corezoid_repo_domain.
+# corezoid_repo_baseurl: "https://mirror.example/corezoid/6.13.0/redhat/9"
+# Public key used for gpgcheck=1 and imported by the role.
+corezoid_repo_gpgkey: "https://repo.middleware.biz/corezoid/RPM-GPG-KEY-Middleware"
+
+# EPEL ------------------------------------------------------------------------
+# Provides atop, iftop, iotop, htop, mc, pwgen... (roles/system base packages).
+# true: enable EPEL (+ CRB/CodeReady Builder on EL8/EL9, which EPEL packages need).
+yum_enable_epel: true
+# RHEL proper only: enabling CRB needs an active subscription. Failure to enable
+# it is reported, not fatal (EPEL itself installs fine without CRB).
+yum_rhel_crb_fail_fatal: false
+
+# EL9 package-signature preflight --------------------------------------------
+# RHEL 9 family hosts with the DEFAULT/FUTURE crypto policy refuse RPMs signed
+# with RSA/SHA1 ("Signature not supported. Hash algorithm SHA1 not available").
+# Corezoid repositories built before the SHA256 re-signing are SHA1-signed.
+# The preflight downloads one small package from aws-corezoid and checks its
+# signature digest against the host policy, failing early with a clear message
+# instead of a cryptic dnf error inside an application role.
+corezoid_repo_preflight: true
+corezoid_repo_preflight_package: "conf-agent-client"
+# EMERGENCY OVERRIDE, off by default. true = apply `update-crypto-policies
+# --set DEFAULT:SHA1` on EL9 hosts when the repository is still SHA1-signed.
+# This weakens the host crypto policy system-wide (documented, audit-visible);
+# use only for a one-off install until the repository is re-signed.
+corezoid_allow_sha1_policy: false

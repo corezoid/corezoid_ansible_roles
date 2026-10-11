@@ -2,7 +2,7 @@
   set_fact:
     el_version: 7
   when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'
     - ansible_distribution_major_version == "7"
   tags:
     - pgsql-all
@@ -13,7 +13,7 @@
   set_fact:
     el_version: 8
   when:
-    - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
+    - ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'
     - ansible_distribution_major_version == "8"
   tags:
     - pgsql-all

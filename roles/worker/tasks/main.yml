@@ -8,6 +8,32 @@
   tags:
     - always
 
+# Guard: the Corezoid repository must have been configured by role 'yum' in this play.
+# Without it dnf fails later with "No package <app>-<ver> available" (or, on EL9 with a
+# SHA1-signed repo, a signature error) — see INF-30520. Add `role: yum` before this role.
+- name: Assert Corezoid repository is configured (role yum)
+  ansible.builtin.stat:
+    path: /etc/yum.repos.d/corezoid-prod.repo
+  register: cz_repo_file
+  when: ansible_os_family == "RedHat"
+  tags:
+    - worker-all
+    - worker-install
+
+- name: Fail when corezoid-prod.repo is missing
+  ansible.builtin.assert:
+    that:
+      - cz_repo_file.stat.exists
+    fail_msg: >-
+      /etc/yum.repos.d/corezoid-prod.repo is missing on {{ inventory_hostname }}: this play does not
+      run role 'yum' before role 'worker'. Add `- role: yum` (it derives the repo path from
+      corezoid_release and the OS; see roles/yum/README.md).
+    quiet: true
+  when: ansible_os_family == "RedHat"
+  tags:
+    - worker-all
+    - worker-install
+
 # Clean YUM cache to ensure fresh package metadata
 # Removes all cached package data to prevent installation issues
 - name: Yum clean all
@@ -71,6 +97,12 @@
   tags:
     - worker-all
     - worker-start
+
+# Open worker ports in firewalld (no-op when firewalld is not running)
+- import_tasks: firewalld.yml
+  tags:
+    - worker-all
+    - worker-firewalld
 
 # Create Monit monitoring configuration
 # Sets up monitoring for the Worker service
