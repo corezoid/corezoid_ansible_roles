@@ -7,32 +7,6 @@
   tags:
     - always
 
-# Guard: the Corezoid repository must have been configured by role 'yum' in this play.
-# Without it dnf fails later with "No package <app>-<ver> available" (or, on EL9 with a
-# SHA1-signed repo, a signature error) — see INF-30520. Add `role: yum` before this role.
-- name: Assert Corezoid repository is configured (role yum)
-  ansible.builtin.stat:
-    path: /etc/yum.repos.d/corezoid-prod.repo
-  register: cz_repo_file
-  when: ansible_os_family == "RedHat"
-  tags:
-    - usercode-all
-    - usercode-install
-
-- name: Fail when corezoid-prod.repo is missing
-  ansible.builtin.assert:
-    that:
-      - cz_repo_file.stat.exists
-    fail_msg: >-
-      /etc/yum.repos.d/corezoid-prod.repo is missing on {{ inventory_hostname }}: this play does not
-      run role 'yum' before role 'usercode'. Add `- role: yum` (it derives the repo path from
-      corezoid_release and the OS; see roles/yum/README.md).
-    quiet: true
-  when: ansible_os_family == "RedHat"
-  tags:
-    - usercode-all
-    - usercode-install
-
 # Clean YUM cache to ensure fresh package metadata
 # Removes all cached package data to prevent installation issues
 - name: Yum clean all
@@ -133,14 +107,13 @@
     - usercode-config
     - usercode-config-file
 
-# Legacy OpenSSL 1.0 library for EL8 (ST-5823 / COR-10772).
-# usercode el8 packages <= 6.13.x link libcrypto.so.1.0.0 (absent on every EL8 distro);
-# OTP 28 builds (>= 6.14) and all EL9 packages do not. Gated by
-# usercode_install_legacy_libcrypto (defaults/main.yml): RHEL-family 8 and release < 6.14.0.
-# Previously OracleLinux 8 only, so RHEL/Rocky/Alma 8 hosts failed to boot usercode on 6.13.0.
-- name: Upload legacy libcrypto.so.1.0.0 (EL8 usercode builds linked against OpenSSL 1.0)
+# Install SSL library for Oracle Linux 8
+# Provides necessary SSL support for Oracle Linux 8 environments
+- name: Upload lib ssl usercode Oracl linux 8
   copy: src=files/libcrypto.so.1.0.0 dest=/lib64/libcrypto.so.1.0.0
-  when: usercode_install_legacy_libcrypto | bool
+  when:
+    - ansible_distribution == "OracleLinux"
+    - ansible_distribution_major_version == "8"
   tags:
     - usercode-all
     - usercode-install

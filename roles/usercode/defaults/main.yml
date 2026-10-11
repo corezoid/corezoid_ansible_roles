@@ -1,11 +1,2 @@
 ---
 # defaults file for usercode
-
-# Copy the bundled libcrypto.so.1.0.0 into /lib64.
-# usercode el8 packages up to release 6.13.x (OTP 24 builders) link their crypto NIF against
-# libcrypto.so.1.0.0, which no EL8 distribution ships: on RHEL/Rocky/Alma/Oracle 8 the release
-# fails to boot without it ("Failed to load NIF library ... libcrypto.so.1.0.0: cannot open shared
-# object file"). OTP 28 builds (release >= 6.14) link OpenSSL statically into the NIF, and EL9
-# packages use the system libcrypto.so.3 — no copy is needed there.
-# Verified 2026-10-08 on clean Rocky 8/9 (swarm report usercode-el8-el9).
-usercode_install_legacy_libcrypto: "{{ ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon' and ansible_distribution_major_version == '8' and corezoid_release is version('6.14.0', '<') }}"

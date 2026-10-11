@@ -42,7 +42,7 @@
     policy: targeted
     state: permissive
   when:
-  - ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'
+  - ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
   tags:
   - system-all
   - system-selinux-action
@@ -112,7 +112,7 @@
   ignore_errors: true
   with_items:
     - { "name": "kernel.sem", "value": "32000 1024000000 500 2000" }
-  when: ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'
+  when: ansible_distribution == "CentOS" or ansible_distribution == "RedHat" or ansible_distribution == "OracleLinux"
   tags:
     - system-all
     - system-redhat-change-sysctl
@@ -164,28 +164,11 @@
     - system-all
     - system-delete-trash-dir
 
-# EPEL is normally enabled by role 'yum' (all RHEL-family flavours). Kept here for
-# plays that run 'system' without 'yum' (e.g. system-only.yml); idempotent.
-- name: Enable EPEL on Oracle Linux EL8/EL9
-  ansible.builtin.dnf:
-    name: "oracle-epel-release-el{{ ansible_distribution_major_version }}"
-    state: present
+- name: install oracle-epel-release-el9
+  shell: dnf install -y oracle-epel-release-el9
   when:
     - ansible_distribution == "OracleLinux"
-    - ansible_distribution_major_version in ["8", "9"]
-  tags:
-    - system-all
-    - system-rpm
-- name: Enable EPEL on CentOS/Rocky/Alma EL8/EL9
-  ansible.builtin.dnf:
-    name: epel-release
-    state: present
-  when:
-    - ansible_distribution in ["CentOS", "Rocky", "AlmaLinux"]
-    - ansible_distribution_major_version in ["8", "9"]
-  tags:
-    - system-all
-    - system-rpm
+    - ansible_distribution_major_version == "9"
 
 - name: Install base packages (per OS family)
   ansible.builtin.include_tasks:
@@ -210,7 +193,7 @@
     update_cache: yes
   ignore_errors: yes
   when:
-    - ansible_os_family == 'RedHat' and ansible_distribution != 'Amazon'
+    - ansible_distribution == 'RedHat' or ansible_distribution == 'CentOS' or ansible_distribution == "OracleLinux"
     - ansible_distribution_major_version == "8"
   tags:
     - system-all

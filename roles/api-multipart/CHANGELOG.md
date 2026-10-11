@@ -5,11 +5,6 @@ All notable changes to the Conveyor API Multipart role will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0] - 2026-10-08
-
-### Added
-- Assert that `/etc/yum.repos.d/corezoid-prod.repo` exists before installing; fails with a message pointing to `role: yum` instead of a cryptic dnf "No package" / GPG error (INF-30520)
-
 ## [1.0.0] - 2025-03-03
 
 ### Added
