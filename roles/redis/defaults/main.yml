@@ -12,3 +12,9 @@ redis_apt_repo_url: "https://packages.redis.io/deb"
 # redis-server/redis-tools 6:7.2.4-1rl1~jammy1 for jammy.
 redis_deb_epoch: "6"
 redis_deb_package_revision: "1rl1~jammy1"
+
+# Counters as a replica (DR): set redis_counter_replicaof_host (and optionally
+# redis_counter_replicaof_port, default 6379) per-env to render `slaveof` into the counters
+# config. Left undefined on purpose — no replication unless the env asks for it.
+# redis_counter_replicaof_host: "10.0.0.1"
+# redis_counter_replicaof_port: 6379

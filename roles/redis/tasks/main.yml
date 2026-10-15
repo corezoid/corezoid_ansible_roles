@@ -75,6 +75,37 @@
     - redis-all
     - redis-create-dirs
 
+# Counters as a replica of another redis (DR). Only when redis_counter_replicaof_host is set;
+# checked BEFORE the config is written: the master must answer from this host and really be a
+# master, otherwise the role fails without touching the config. check_mode: false — the checks
+# are read-only and must also run under --check.
+- name: Check counters replication master is reachable
+  when:
+    - redis_install_counter | bool
+    - redis_counter_replicaof_host is defined
+  tags:
+    - redis-all
+    - redis-create-configs
+    - redis-replicaof
+  block:
+    - name: Counters master TCP port is open
+      ansible.builtin.wait_for:
+        host: "{{ redis_counter_replicaof_host }}"
+        port: "{{ redis_counter_replicaof_port | default(6379) }}"
+        timeout: 10
+      check_mode: false
+
+    - name: Counters master answers PING and is a master
+      ansible.builtin.command: >-
+        redis-cli -h {{ redis_counter_replicaof_host }} -p {{ redis_counter_replicaof_port | default(6379) }}
+        info replication
+      register: redis_replicaof_master
+      changed_when: false
+      check_mode: false
+      failed_when: >-
+        redis_replicaof_master.rc != 0
+        or 'role:master' not in redis_replicaof_master.stdout
+
 # Deploy Redis configuration files
 # Creates configuration files for each Redis instance from templates
 - name: Add configs for redis
@@ -178,6 +209,23 @@
   tags:
     - redis-all
     - redis-start-enable
+
+# Replica link is up after start. A config change does not restart an already running redis
+# (state: started), so on a live instance this only confirms the current link.
+- name: Counters replica link to master is up
+  ansible.builtin.command: redis-cli -p {{ redis_counter_port }} info replication
+  register: redis_replicaof_link
+  changed_when: false
+  check_mode: false
+  retries: 12
+  delay: 5
+  until: "'master_link_status:up' in redis_replicaof_link.stdout"
+  when:
+    - redis_install_counter | bool
+    - redis_counter_replicaof_host is defined
+  tags:
+    - redis-all
+    - redis-replicaof
 
 # Setup Monit monitoring configuration
 # Creates monitoring configuration for Redis services with secure permissions

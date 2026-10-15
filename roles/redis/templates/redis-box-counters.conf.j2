@@ -75,3 +75,6 @@ requirepass {{ redis_counter_password }}
 {% else %}
 #requirepass pass
 {% endif %}
+{% if redis_counter_replicaof_host is defined %}
+slaveof {{ redis_counter_replicaof_host }} {{ redis_counter_replicaof_port | default(6379) }}
+{% endif %}
