@@ -306,9 +306,9 @@
     - rabbitmq-all
     - rabbitmq-policy
 
-# Set HA policy for gitcall vhosts
+# Set HA policy for gitcall/dbcall vhosts
 # Mirror all queues across cluster
-- name: Ensure the gitcall vhost contains the HA policy
+- name: Ensure the gitcall and dbcall vhosts contain the HA policy
   rabbitmq_policy:
     name: "ha-all-{{ item }}"
     pattern: .*
@@ -320,6 +320,7 @@
   with_items:
     - "gitcall"
     - "dundergitcall"
+    - "dbcall"
   tags:
     - rabbitmq-all
     - rabbitmq-policy
